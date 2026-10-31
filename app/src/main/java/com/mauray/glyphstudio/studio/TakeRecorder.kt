@@ -156,7 +156,7 @@ class TakeRecorder(
             for (f in t.written + 1..playhead) {
                 performance.levelsAt(f + offset, levels)
                 for (z in 0 until GlyphZones.COUNT) {
-                    val v = stored(levels[z])
+                    val v = LightShapes.stored(levels[z])
                     track[f, z] = if (t.overdub) max(track[f, z], v) else v
                 }
             }
@@ -180,13 +180,11 @@ class TakeRecorder(
         performance.levelsAt(nowFrame(), levels)
         document.copyFrame(playhead, frame)
         val lights = IntArray(GlyphZones.COUNT) { z ->
-            max(frame[z].toInt(), stored(levels[z])).also { frame[z] = it.toShort() }
+            max(frame[z].toInt(), LightShapes.stored(levels[z])).also { frame[z] = it.toShort() }
         }
         output(frame)
         _live.value = Live(playhead, clock.playing, take != null, performance.heldPads, lights)
     }
-
-    private fun stored(level: Float) = (level * GlyphZones.MAX_BRIGHTNESS).toInt()
 
     private fun nowFrame(): Int = ((clock.nowNanos - origin) * GlyphZones.FPS / 1_000_000_000L).toInt()
 

@@ -3,9 +3,9 @@ package com.mauray.glyphstudio.composer
 import com.mauray.glyphstudio.glyph.GlyphZones
 import com.mauray.glyphstudio.glyph.GlyphZones.Strip
 import com.mauray.glyphstudio.model.LightTrack
+import com.mauray.glyphstudio.studio.LightShapes
 import kotlin.math.max
 import kotlin.math.min
-import kotlin.math.pow
 
 enum class ComposerStyle(val label: String, val description: String) {
     PULSE("Pulse", "Kicks, snares and hats each get a strip"),
@@ -41,16 +41,11 @@ object AutoComposer {
             ComposerStyle.FLOW -> flow(analysis, params, levels)
             ComposerStyle.CLASSIC -> classic(analysis, params, levels)
         }
-        val peak = params.intensity.coerceIn(0f, 1f) * GlyphZones.MAX_BRIGHTNESS
+        val intensity = params.intensity.coerceIn(0f, 1f)
         for (t in clipped) {
-            for (z in 0 until GlyphZones.COUNT) {
-                // Gamma so mid levels read as clearly dimmer than peaks.
-                track[t, z] = (levels[t][z].coerceIn(0f, 1f).pow(GAMMA) * peak).toInt()
-            }
+            for (z in 0 until GlyphZones.COUNT) track[t, z] = LightShapes.stored(levels[t][z].coerceIn(0f, 1f) * intensity)
         }
     }
-
-    private const val GAMMA = 1.6f
 
     private fun pulse(a: Analysis, p: ComposerParams, out: Array<FloatArray>) {
         val bassHits = AudioAnalyzer.onsets(a.bassFlux, p.sensitivity)
@@ -93,6 +88,7 @@ object AutoComposer {
         val highHits = AudioAnalyzer.onsets(a.highFlux, p.sensitivity, minGapFrames = 5)
         val decay = AudioAnalyzer.decayFactor(p.releaseMs)
         val cZones = Strip.C.zones.toList()
+        val cBackwards = cZones.reversed()
         val bZones = Strip.B.zones.toList()
         // Each comet crosses strip C in ~0.4 s, alternating direction.
         val speed = cZones.size / (0.4f * GlyphZones.FPS)
@@ -110,13 +106,7 @@ object AutoComposer {
             comets.removeAll { (t - it.start) * speed > cZones.size + tail }
             for (comet in comets) {
                 val head = (t - comet.start) * speed
-                for ((i, zone) in cZones.withIndex()) {
-                    val pos = if (comet.forward) i.toFloat() else (cZones.lastIndex - i).toFloat()
-                    val behind = head - pos
-                    if (behind in 0f..tail) {
-                        out[t][zone] = max(out[t][zone], comet.strength * (1f - behind / tail))
-                    }
-                }
+                LightShapes.trail(if (comet.forward) cZones else cBackwards, head, tail, comet.strength, out[t])
             }
             meter(levelsA, Strip.A.zones.reversed().toList(), a.loudness[t], decay)
             for (zone in Strip.A.zones) out[t][zone] = levelsA[zone]

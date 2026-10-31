@@ -71,18 +71,19 @@ class PadPerformance(
         }
     }
 
+    /** The trail runs off the far end of the arc in [sweepFrames]. */
     private fun sweep(hit: Hit, frame: Int, out: FloatArray) {
         val zones = hit.pad.zones
-        val tail = 5f
-        val head = (frame - hit.down).toFloat() / sweepFrames * (zones.size + tail)
-        for ((i, zone) in zones.withIndex()) {
-            val behind = head - i
-            if (behind in 0f..tail) out[zone] = max(out[zone], (1f - behind / tail) * hit.level)
-        }
+        val head = (frame - hit.down).toFloat() / sweepFrames * (zones.size + SWEEP_TAIL)
+        LightShapes.trail(zones, head, SWEEP_TAIL, hit.level, out)
     }
 
     private fun Hit.endFrame(): Int = when {
         pad == Pad.SWEEP -> down + sweepFrames + 1
         else -> up?.let { it + fadeFrames } ?: Int.MAX_VALUE
+    }
+
+    private companion object {
+        const val SWEEP_TAIL = 5f
     }
 }

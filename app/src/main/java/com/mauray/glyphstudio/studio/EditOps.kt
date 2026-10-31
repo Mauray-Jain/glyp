@@ -34,37 +34,29 @@ object EditOps {
     ) {
         val range = max(0, frames.first)..minOf(track.frameCount - 1, frames.last)
         if (range.isEmpty() || zones.isEmpty()) return
-        val peak = brightness.coerceIn(0f, 1f) * GlyphZones.MAX_BRIGHTNESS
         val length = (range.last - range.first).coerceAtLeast(1)
+        val backwards = zones.reversed()
+        // A short tail relative to the selection, so a sweep reads as a moving point.
+        val tail = max(2f, zones.size / 4f)
+        val levels = FloatArray(GlyphZones.COUNT)
 
         for (t in range) {
             val progress = (t - range.first).toFloat() / length
+            levels.fill(0f)
             when (tool) {
-                EditTool.FILL -> zones.forEach { track[t, it] = peak.toInt() }
-                EditTool.CLEAR -> zones.forEach { track[t, it] = 0 }
-                EditTool.FADE_IN -> zones.forEach { track[t, it] = (peak * progress).toInt() }
-                EditTool.FADE_OUT -> zones.forEach { track[t, it] = (peak * (1 - progress)).toInt() }
+                EditTool.FILL -> zones.forEach { levels[it] = 1f }
+                EditTool.CLEAR -> Unit
+                EditTool.FADE_IN -> zones.forEach { levels[it] = progress }
+                EditTool.FADE_OUT -> zones.forEach { levels[it] = 1 - progress }
                 EditTool.PULSE -> {
                     val seconds = (t - range.first).toFloat() / GlyphZones.FPS
                     val level = 0.5f - 0.5f * cos(2 * PI * pulsesPerSecond * seconds).toFloat()
-                    zones.forEach { track[t, it] = (peak * level).toInt() }
+                    zones.forEach { levels[it] = level }
                 }
-                EditTool.SWEEP, EditTool.SWEEP_BACK -> {
-                    val order = if (tool == EditTool.SWEEP) zones else zones.reversed()
-                    sweep(track, t, order, progress, peak)
-                }
+                EditTool.SWEEP -> LightShapes.trail(zones, progress * (zones.size - 1 + tail), tail, 1f, levels)
+                EditTool.SWEEP_BACK -> LightShapes.trail(backwards, progress * (zones.size - 1 + tail), tail, 1f, levels)
             }
-        }
-    }
-
-    /** A bright head with a short fading tail moving through [order] as [progress] goes 0→1. */
-    private fun sweep(track: LightTrack, t: Int, order: List<Int>, progress: Float, peak: Float) {
-        val tail = max(2f, order.size / 4f)
-        val head = progress * (order.size - 1 + tail)
-        for ((i, zone) in order.withIndex()) {
-            val behind = head - i
-            val level = if (behind in 0f..tail) 1f - behind / tail else 0f
-            track[t, zone] = (peak * level).toInt()
+            for (z in zones) track[t, z] = LightShapes.stored(levels[z] * brightness)
         }
     }
 }

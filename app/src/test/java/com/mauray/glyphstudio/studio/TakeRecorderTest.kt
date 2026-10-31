@@ -106,7 +106,7 @@ class TakeRecorderTest {
         advance(500)
         r.recorder.stop()
         assertEquals(1000, r.doc[10, rightZone])
-        assertEquals(GlyphZones.MAX_BRIGHTNESS / 2, r.doc[10, topZone])
+        assertEquals("half brightness through the level curve", LightShapes.stored(0.5f), r.doc[10, topZone])
     }
 
     @Test
