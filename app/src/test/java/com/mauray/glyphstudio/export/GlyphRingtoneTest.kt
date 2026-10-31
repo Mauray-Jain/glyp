@@ -40,8 +40,8 @@ class GlyphRingtoneTest {
 
     @Test
     fun `timeline dots mark each strip switching on`() {
-        // C on at 0 ms, B on at 0 ms, A on at frame 1 (16 ms).
-        assertEquals("0-0,0-2,16-1,", String(GlyphRingtone.timelineDots(track(), 3), Charsets.US_ASCII))
+        // C on at 0 ms, B on at 0 ms, A on at frame 1 (which starts at 16.7 ms, so 17).
+        assertEquals("0-0,0-2,17-1,", String(GlyphRingtone.timelineDots(track(), 3), Charsets.US_ASCII))
     }
 
     @Test
@@ -52,7 +52,7 @@ class GlyphRingtoneTest {
         assertEquals(GlyphRingtone.COLUMNS, tags["CUSTOM2"])
         // 20 ms of song is two frames: the third is dropped.
         assertEquals(String(GlyphRingtone.csv(track(), 2), Charsets.US_ASCII), decode(tags.getValue("AUTHOR")))
-        assertEquals("0-0,0-2,16-1,", decode(tags.getValue("CUSTOM1")))
+        assertEquals("0-0,0-2,17-1,", decode(tags.getValue("CUSTOM1")))
     }
 
     @Test

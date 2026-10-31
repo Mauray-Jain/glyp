@@ -1,5 +1,6 @@
 package com.mauray.glyphstudio.model
 
+import com.mauray.glyphstudio.audio.Timebase
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
@@ -64,7 +65,7 @@ class ProjectStore(
         writeAtomically(audioFile) { out -> openAudio().use { it.copyTo(out) } }
         val time = now()
         val meta = ProjectMeta(id, fileName.substringBeforeLast('.'), audioFile.name, durationMs, time, time, autoCompose)
-        val lights = LightTrack(LightTrack.framesForDuration(durationMs))
+        val lights = LightTrack(Timebase.framesFor(durationMs))
         Project(save(meta, lights), audioFile, lights)
     }
 

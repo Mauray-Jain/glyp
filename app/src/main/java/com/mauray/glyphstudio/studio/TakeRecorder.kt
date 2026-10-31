@@ -1,9 +1,8 @@
 package com.mauray.glyphstudio.studio
 
+import com.mauray.glyphstudio.audio.Timebase
 import com.mauray.glyphstudio.glyph.GlyphZones
 import com.mauray.glyphstudio.model.LightDocument
-import com.mauray.glyphstudio.model.frameToMs
-import com.mauray.glyphstudio.model.msToFrame
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -67,7 +66,7 @@ class TakeRecorder(
     fun play() {
         if (clock.playing) return
         if (playhead >= lastFrame) playhead = 0
-        clock.play(frameToMs(playhead))
+        clock.play(Timebase.msAt(playhead))
         startTicking()
         render()
     }
@@ -83,7 +82,7 @@ class TakeRecorder(
     fun seek(frame: Int) {
         if (take != null) return
         playhead = frame.coerceIn(0, lastFrame)
-        if (clock.playing) clock.play(frameToMs(playhead))
+        if (clock.playing) clock.play(Timebase.msAt(playhead))
         render()
     }
 
@@ -95,7 +94,7 @@ class TakeRecorder(
         if (take != null) return
         if (playhead >= lastFrame) playhead = 0
         take = Take(document.begin(), overdub, written = playhead - 1)
-        clock.play(frameToMs(playhead))
+        clock.play(Timebase.msAt(playhead))
         startTicking()
         // Publish the new state now: callers check [live] to decide what else is allowed.
         render()
@@ -122,8 +121,9 @@ class TakeRecorder(
         clock.release()
     }
 
+    /** The song has finished: the playhead parks on the last frame, so the next play rewinds. */
     private fun onEnd() {
-        playhead = msToFrame(clock.songMs).coerceIn(0, lastFrame)
+        playhead = lastFrame
         finishTake()
         render()
     }
@@ -143,7 +143,7 @@ class TakeRecorder(
     /** Moves the playhead with the song and writes the take up to it. */
     private fun advance() {
         val now = nowFrame()
-        if (clock.playing) playhead = msToFrame(clock.songMs).coerceIn(0, lastFrame)
+        if (clock.playing) playhead = Timebase.frameAt(clock.songMs).coerceIn(0, lastFrame)
         take?.let { write(it, now) }
         performance.forgetEndedBefore(now)
     }

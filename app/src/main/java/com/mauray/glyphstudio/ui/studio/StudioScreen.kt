@@ -47,11 +47,11 @@ import androidx.lifecycle.ViewModelStoreOwner
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.mauray.glyphstudio.audio.Timebase
 import com.mauray.glyphstudio.composer.ComposerStyle
 import com.mauray.glyphstudio.export.Ringtone
 import com.mauray.glyphstudio.glyph.GlyphController
 import com.mauray.glyphstudio.glyph.GlyphZones
-import com.mauray.glyphstudio.model.frameToMs
 import com.mauray.glyphstudio.ui.AppIcons
 import com.mauray.glyphstudio.ui.components.CircleButton
 import com.mauray.glyphstudio.ui.components.NCard
@@ -427,6 +427,6 @@ private fun glyphStatus(state: GlyphController.State) = when (state) {
 }
 
 internal fun formatTime(frame: Int): String {
-    val ms = frameToMs(frame)
+    val ms = Timebase.msAt(frame)
     return "%d:%02d.%02d".format(ms / 60_000, ms / 1000 % 60, ms / 10 % 100)
 }

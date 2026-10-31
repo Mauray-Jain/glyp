@@ -156,6 +156,33 @@ class TakeRecorderTest {
     }
 
     @Test
+    fun `the end of the song parks the playhead so play starts over`() = runTest {
+        val r = rig()
+        r.recorder.seek(590)
+        r.recorder.play()
+        advance(1_000)
+        assertFalse(r.recorder.live.value.playing)
+        assertEquals(599, r.recorder.live.value.playhead)
+        r.recorder.play()
+        advance(100)
+        assertTrue(r.recorder.live.value.playing)
+        assertTrue(r.recorder.live.value.playhead < 10)
+    }
+
+    @Test
+    fun `seeking then playing starts on the frame that was picked`() = runTest {
+        val r = rig()
+        for (frame in listOf(1, 7, 59, 61, 333)) {
+            r.recorder.seek(frame)
+            r.recorder.play()
+            assertEquals(frame, r.recorder.live.value.playhead)
+            testScheduler.runCurrent()
+            assertEquals(frame, r.recorder.live.value.playhead)
+            r.recorder.pause()
+        }
+    }
+
+    @Test
     fun `edits show at the playhead while idle`() = runTest {
         val r = rig()
         r.recorder.seek(50)

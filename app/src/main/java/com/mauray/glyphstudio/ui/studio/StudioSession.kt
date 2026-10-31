@@ -1,6 +1,6 @@
 package com.mauray.glyphstudio.ui.studio
 
-import com.mauray.glyphstudio.composer.Analysis
+import com.mauray.glyphstudio.audio.Song
 import com.mauray.glyphstudio.composer.AutoComposer
 import com.mauray.glyphstudio.composer.ComposerParams
 import com.mauray.glyphstudio.export.ExportJob
@@ -78,8 +78,8 @@ class StudioSession(
     projectId: String,
     private val scope: CoroutineScope,
     private val store: ProjectStore,
-    /** Decodes and analyses the song: features and waveform for [frames] light frames. */
-    private val analyze: suspend (audio: File, frames: Int, onProgress: (Float) -> Unit) -> Pair<Analysis, FloatArray>,
+    /** Decodes and analyses the song for [frames] light frames. */
+    private val loadSong: suspend (audio: File, frames: Int, onProgress: (Float) -> Unit) -> Song,
     private val openClock: suspend (audio: File) -> Clock,
     private val exportRingtone: suspend (ExportJob, onProgress: (Float) -> Unit) -> Ringtone,
     /** Receives every frame the Glyphs should show. */
@@ -91,8 +91,7 @@ class StudioSession(
     private class Opened(
         var meta: ProjectMeta,
         val audioFile: File,
-        val analysis: Analysis,
-        val waveform: FloatArray,
+        val song: Song,
         val document: LightDocument,
         val recorder: TakeRecorder,
     )
@@ -128,19 +127,19 @@ class StudioSession(
         try {
             val p = store.load(id)
             _state.value = StudioState.Loading("Listening to the track…", 0f)
-            val (analysis, waveform) = analyze(p.audioFile, p.lights.frameCount) { progress ->
+            val song = loadSong(p.audioFile, p.lights.frameCount) { progress ->
                 _state.value = StudioState.Loading("Listening to the track…", progress)
             }
             // A new project (unless started blank) gets its automatic composition once.
             val meta = if (p.meta.pendingAutoCompose) {
-                withContext(compute) { AutoComposer.compose(analysis, ComposerParams(), p.lights) }
+                withContext(compute) { AutoComposer.compose(song.analysis, ComposerParams(), p.lights) }
                 store.save(p.meta.copy(pendingAutoCompose = false), p.lights)
             } else {
                 p.meta
             }
             val document = LightDocument(p.lights)
             val recorder = TakeRecorder(document, openClock(p.audioFile), scope, showLights)
-            val o = Opened(meta, p.audioFile, analysis, waveform, document, recorder)
+            val o = Opened(meta, p.audioFile, song, document, recorder)
             opened = o
             scope.launch { recorder.live.collect { publish(o) } }
             scope.launch { document.revision.collect { publish(o) } }
@@ -160,7 +159,7 @@ class StudioSession(
             phase = phaseOf(o),
             name = o.meta.name,
             track = doc,
-            waveform = o.waveform,
+            waveform = o.song.waveform,
             playhead = live.playhead,
             lights = live.lights,
             heldPads = live.heldPads,
@@ -215,7 +214,7 @@ class StudioSession(
         val o = editable() ?: return
         val frames = range ?: 0 until o.document.frameCount
         scope.launch {
-            o.document.editInBackground(compute) { AutoComposer.compose(o.analysis, params, it, frames) }
+            o.document.editInBackground(compute) { AutoComposer.compose(o.song.analysis, params, it, frames) }
         }
     }
 
@@ -255,7 +254,7 @@ class StudioSession(
         val o = editable() ?: return Result.failure(IllegalStateException("Busy"))
         o.recorder.pause()
         o.meta = o.meta.copy(name = title)
-        val job = ExportJob(title, o.audioFile, o.document.snapshot(), o.meta.durationMs)
+        val job = ExportJob(title, o.audioFile, o.song.pcm, o.document.snapshot(), o.meta.durationMs)
         setExporting(o, Phase.Exporting(0f))
         return try {
             save(o)

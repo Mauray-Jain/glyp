@@ -1,9 +1,8 @@
 package com.mauray.glyphstudio.export
 
+import com.mauray.glyphstudio.audio.Timebase
 import com.mauray.glyphstudio.glyph.GlyphZones
 import com.mauray.glyphstudio.model.LightFrames
-import com.mauray.glyphstudio.model.LightTrack
-import com.mauray.glyphstudio.model.frameToMs
 import java.io.ByteArrayOutputStream
 import java.util.Base64
 import java.util.zip.Deflater
@@ -30,7 +29,7 @@ object GlyphRingtone {
 
     fun tags(title: String, lights: LightFrames, durationMs: Long): List<Pair<String, String>> {
         // Light data longer than the audio is ignored by the player, so trim it.
-        val frames = minOf(lights.frameCount, LightTrack.framesForDuration(durationMs))
+        val frames = minOf(lights.frameCount, Timebase.framesFor(durationMs))
         return listOf(
             "TITLE" to title,
             "ALBUM" to "Glyph Studio",
@@ -57,7 +56,7 @@ object GlyphRingtone {
         for (t in 0 until frames) {
             for (strip in GlyphZones.Strip.entries) {
                 val on = strip.zones.any { lights[t, it] > 0 }
-                if (on && !wasOn[strip.ordinal]) sb.append(frameToMs(t)).append('-').append(strip.customId).append(',')
+                if (on && !wasOn[strip.ordinal]) sb.append(Timebase.msAt(t)).append('-').append(strip.customId).append(',')
                 wasOn[strip.ordinal] = on
             }
         }

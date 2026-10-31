@@ -48,8 +48,6 @@ class LightTrack private constructor(override val frameCount: Int, private val d
     }
 
     companion object {
-        fun framesForDuration(durationMs: Long) = ((durationMs * GlyphZones.FPS + 999) / 1000).toInt()
-
         fun readFrom(input: DataInputStream): LightTrack {
             val frames = input.readInt()
             val data = ShortArray(frames * GlyphZones.COUNT)
@@ -58,7 +56,3 @@ class LightTrack private constructor(override val frameCount: Int, private val d
         }
     }
 }
-
-/** Frame index → milliseconds and back. */
-fun frameToMs(frame: Int): Long = frame * 1000L / GlyphZones.FPS
-fun msToFrame(ms: Long): Int = (ms * GlyphZones.FPS / 1000).toInt()

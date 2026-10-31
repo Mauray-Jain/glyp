@@ -9,7 +9,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import app.cash.paparazzi.DeviceConfig
 import app.cash.paparazzi.Paparazzi
-import com.mauray.glyphstudio.composer.AudioAnalyzer
+import com.mauray.glyphstudio.audio.PcmAudio
+import com.mauray.glyphstudio.audio.Song
+import com.mauray.glyphstudio.audio.Timebase
 import com.mauray.glyphstudio.composer.AutoComposer
 import com.mauray.glyphstudio.composer.ComposerParams
 import com.mauray.glyphstudio.composer.ComposerStyle
@@ -30,9 +32,7 @@ import com.mauray.glyphstudio.ui.studio.StudioMode
 import com.mauray.glyphstudio.ui.studio.StudioState
 import com.mauray.glyphstudio.ui.theme.GlyphStudioTheme
 import kotlin.math.PI
-import kotlin.math.abs
 import kotlin.math.exp
-import kotlin.math.max
 import kotlin.math.sin
 import kotlin.random.Random
 import org.junit.Rule
@@ -128,25 +128,20 @@ class ScreenshotTest {
     private fun demoTrack(): Pair<LightTrack, FloatArray> {
         val sr = 44_100
         val rnd = Random(7)
-        val mono = FloatArray(sr * 12) { i ->
+        val samples = ShortArray(sr * 12) { i ->
             val t = i.toFloat() / sr
             val kt = t % 0.5f
             val ht = t % 0.25f
             val note = 330f * (1 + (t * 2).toInt() % 4 * 0.25f)
-            0.8f * sin(2 * PI.toFloat() * 55f * kt) * exp(-kt * 18f) +
+            val v = 0.8f * sin(2 * PI.toFloat() * 55f * kt) * exp(-kt * 18f) +
                 0.15f * (rnd.nextFloat() * 2 - 1) * exp(-ht * 70f) +
                 0.12f * sin(2 * PI.toFloat() * note * t) * exp(-(t % 0.5f) * 4f)
+            (v.coerceIn(-1f, 1f) * 32767).toInt().toShort()
         }
-        val frames = LightTrack.framesForDuration(12_000)
-        val track = LightTrack(frames)
-        AutoComposer.compose(AudioAnalyzer.analyze(mono, sr, frames), ComposerParams(ComposerStyle.PULSE), track)
-        val perFrame = sr / GlyphZones.FPS
-        val wave = FloatArray(frames) { f ->
-            var peak = 0f
-            for (i in f * perFrame until minOf(mono.size, (f + 1) * perFrame)) peak = max(peak, abs(mono[i]))
-            peak
-        }
-        return track to wave
+        val song = Song.of(PcmAudio(samples, sr, 1), Timebase.framesFor(12_000))
+        val track = LightTrack(song.frameCount)
+        AutoComposer.compose(song.analysis, ComposerParams(ComposerStyle.PULSE), track)
+        return track to song.waveform
     }
 
     private object NoActions : StudioActions {

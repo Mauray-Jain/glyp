@@ -1,6 +1,7 @@
 package com.mauray.glyphstudio.ui.studio
 
-import com.mauray.glyphstudio.composer.AudioAnalyzer
+import com.mauray.glyphstudio.audio.PcmAudio
+import com.mauray.glyphstudio.audio.Song
 import com.mauray.glyphstudio.composer.ComposerParams
 import com.mauray.glyphstudio.export.ExportJob
 import com.mauray.glyphstudio.export.Ringtone
@@ -46,11 +47,10 @@ class StudioSessionTest {
             projectId = id,
             scope = backgroundScope,
             store = store,
-            analyze = { _, frames, onProgress ->
+            loadSong = { _, frames, onProgress ->
                 val rate = 8_000
-                val mono = FloatArray(rate * 10) { i -> if (i % (rate / 2) < 200) sin(i * 0.3f) else 0f }
-                onProgress(0.5f)
-                AudioAnalyzer.analyze(mono, rate, frames) to FloatArray(frames)
+                val click = ShortArray(rate * 10) { i -> if (i % (rate / 2) < 200) (sin(i * 0.3f) * 20_000).toInt().toShort() else 0 }
+                Song.of(PcmAudio(click, rate, 1), frames, onProgress)
             },
             openClock = { FakeClock(backgroundScope, testScheduler, durationMs = 10_000) },
             exportRingtone = { job, onProgress ->
@@ -95,7 +95,7 @@ class StudioSessionTest {
     fun `a missing project fails with a message`() = runTest {
         val session = StudioSession(
             "nope", backgroundScope, store,
-            analyze = { _, _, _ -> error("unused") },
+            loadSong = { _, _, _ -> error("unused") },
             openClock = { error("unused") },
             exportRingtone = { _, _ -> error("unused") },
             showLights = {},
