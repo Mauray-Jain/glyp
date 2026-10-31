@@ -3,6 +3,8 @@ package com.mauray.glyphstudio.ui.studio
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -53,6 +55,8 @@ fun GlyphPreview(
     onZoneTap: (Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    // The gesture loop outlives recompositions; read the latest callback, not the first one.
+    val currentOnZoneTap by rememberUpdatedState(onZoneTap)
     Canvas(
         modifier.pointerInput(Unit) {
             detectTapGestures { pos ->
@@ -60,7 +64,7 @@ fun GlyphPreview(
                 val hit = (0 until GlyphZones.COUNT).minByOrNull { z -> g.zoneCenter(z).let { hypot(pos.x - it.x, pos.y - it.y) } }
                     ?: return@detectTapGestures
                 val c = g.zoneCenter(hit)
-                if (hypot(pos.x - c.x, pos.y - c.y) < g.ring * 0.3f) onZoneTap(hit)
+                if (hypot(pos.x - c.x, pos.y - c.y) < g.ring * 0.3f) currentOnZoneTap(hit)
             }
         },
     ) {
