@@ -21,8 +21,8 @@ import kotlin.math.max
  * the clock's monotonic time, so they survive play and pause; while recording, each tick maps
  * them onto the song frames that played since the last tick and writes them into the take.
  *
- * A take is one [LightDocument] transaction. It is committed by [stop], [pause], the end of
- * the song and [close], so every way out of recording keeps what was played.
+ * A take is one [LightDocument] transaction. It is committed by [pause], the end of the song
+ * and [close], so every way out of recording keeps what was played.
  */
 class TakeRecorder(
     private val document: LightDocument,
@@ -65,7 +65,7 @@ class TakeRecorder(
     /** Plays from the playhead, rewinding first if it is at the end. */
     fun play() {
         if (clock.playing) return
-        if (playhead >= lastFrame) playhead = 0
+        rewindAtEnd()
         clock.play(Timebase.msAt(playhead))
         startTicking()
         render()
@@ -92,15 +92,13 @@ class TakeRecorder(
      */
     fun record(overdub: Boolean) {
         if (take != null) return
-        if (playhead >= lastFrame) playhead = 0
+        rewindAtEnd()
         take = Take(document.begin(), overdub, written = playhead - 1)
         clock.play(Timebase.msAt(playhead))
         startTicking()
         // Publish the new state now: callers check [live] to decide what else is allowed.
         render()
     }
-
-    fun stop() = pause()
 
     /** [level] is the pad brightness, 0..1. */
     fun pressPad(pad: Pad, level: Float) {
@@ -126,6 +124,10 @@ class TakeRecorder(
         playhead = lastFrame
         finishTake()
         render()
+    }
+
+    private fun rewindAtEnd() {
+        if (playhead >= lastFrame) playhead = 0
     }
 
     private fun startTicking() {

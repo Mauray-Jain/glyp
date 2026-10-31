@@ -53,7 +53,7 @@ class TakeRecorderTest {
         advance(500) // frame 180
         r.recorder.releasePad(Pad.RIGHT)
         advance(500)
-        r.recorder.stop()
+        r.recorder.pause()
         assertFalse(r.recorder.live.value.recording)
         assertEquals(0, r.doc[140, rightZone])
         assertEquals(GlyphZones.MAX_BRIGHTNESS, r.doc[165, rightZone])
@@ -67,7 +67,7 @@ class TakeRecorderTest {
         r.recorder.record(overdub = true)
         r.recorder.pressPad(Pad.ALL, 1f)
         advance(1_000)
-        r.recorder.stop()
+        r.recorder.pause()
         assertTrue(r.doc[30, topZone] > 0)
         r.doc.undo()
         assertEquals(0, r.doc[30, topZone])
@@ -93,7 +93,7 @@ class TakeRecorderTest {
         val r = rig { track -> for (f in 0 until 600) track[f, rightZone] = 1000 }
         r.recorder.record(overdub = false)
         advance(500)
-        r.recorder.stop()
+        r.recorder.pause()
         assertEquals(0, r.doc[10, rightZone])
         assertEquals("untouched after the take", 1000, r.doc[200, rightZone])
     }
@@ -104,7 +104,7 @@ class TakeRecorderTest {
         r.recorder.record(overdub = true)
         r.recorder.pressPad(Pad.TOP, 0.5f)
         advance(500)
-        r.recorder.stop()
+        r.recorder.pause()
         assertEquals(1000, r.doc[10, rightZone])
         assertEquals("half brightness through the level curve", LightShapes.stored(0.5f), r.doc[10, topZone])
     }

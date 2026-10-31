@@ -39,7 +39,8 @@ class LightDocument(initial: LightTrack, private val undoBudgetBytes: Long = DEF
     val canUndo: Boolean get() = confined { open == null && undoStack.isNotEmpty() }
     val canRedo: Boolean get() = confined { open == null && redoStack.isNotEmpty() }
 
-    override val frameCount: Int get() = track.frameCount
+    /** Fixed for the document's life, so unlike everything else it is safe from any thread. */
+    override val frameCount: Int = initial.frameCount
 
     override fun get(frame: Int, zone: Int): Int = confined { track[frame, zone] }
 

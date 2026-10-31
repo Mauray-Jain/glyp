@@ -193,7 +193,7 @@ class StudioSession(
         val o = opened ?: return
         when (phase) {
             Phase.Idle, Phase.Playing -> o.recorder.record(overdub)
-            Phase.Recording -> o.recorder.stop()
+            Phase.Recording -> o.recorder.pause()
             else -> Unit
         }
     }
