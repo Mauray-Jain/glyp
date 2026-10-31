@@ -1,0 +1,12 @@
+.gradle/
+build/
+/local.properties
+.idea/
+*.iml
+.DS_Store
+/captures
+.externalNativeBuild
+.cxx
+
+# Nothing's Glyph SDK: fetched by scripts/fetch-glyph-sdk.sh, not redistributed here.
+/app/libs/*.aar

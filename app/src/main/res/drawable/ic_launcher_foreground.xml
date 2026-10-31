@@ -1,0 +1,13 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Three glyph strips, loosely following the Phone (3a) layout. -->
+    <path android:strokeColor="#FFFFFF" android:strokeWidth="5" android:strokeLineCap="round"
+        android:pathData="M36,62 Q36,38 60,36" />
+    <path android:strokeColor="#FFFFFF" android:strokeWidth="5" android:strokeLineCap="round"
+        android:pathData="M72,44 L72,68" />
+    <path android:strokeColor="#D71921" android:strokeWidth="5" android:strokeLineCap="round"
+        android:pathData="M48,74 L38,70" />
+</vector>
