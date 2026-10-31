@@ -1,13 +1,9 @@
-@file:OptIn(ExperimentalLayoutApi::class)
-
 package com.mauray.glyphstudio.ui.studio
 
 import android.app.Application
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -37,7 +33,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -46,18 +42,16 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.ViewModelStore
 import androidx.lifecycle.ViewModelStoreOwner
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.mauray.glyphstudio.composer.ComposerStyle
+import com.mauray.glyphstudio.export.Ringtone
 import com.mauray.glyphstudio.glyph.GlyphController
 import com.mauray.glyphstudio.glyph.GlyphZones
-import com.mauray.glyphstudio.model.LightFrames
 import com.mauray.glyphstudio.model.frameToMs
-import com.mauray.glyphstudio.studio.EditTool
 import com.mauray.glyphstudio.ui.AppIcons
 import com.mauray.glyphstudio.ui.components.CircleButton
 import com.mauray.glyphstudio.ui.components.NCard
@@ -72,9 +66,10 @@ import com.mauray.glyphstudio.ui.theme.Muted
 import com.mauray.glyphstudio.ui.theme.NothingRed
 import com.mauray.glyphstudio.ui.theme.Surface1
 import com.mauray.glyphstudio.ui.theme.Surface2
+import kotlinx.coroutines.launch
 
 /**
- * Gives each opened project its own ViewModel that is cleared (player released, edits saved)
+ * Gives each opened project its own ViewModel that is cleared (take committed, edits saved)
  * as soon as the user leaves the Studio, instead of living as long as the activity.
  */
 @Composable
@@ -86,64 +81,66 @@ fun StudioScreen(projectId: String, onBack: () -> Unit) {
         }
     }
     DisposableEffect(owner) { onDispose { owner.viewModelStore.clear() } }
-    val vm: StudioViewModel = viewModel(
-        viewModelStoreOwner = owner,
-        factory = ViewModelProvider.AndroidViewModelFactory.getInstance(app),
-    )
-    StudioScreen(projectId, onBack, vm)
-}
-
-@Composable
-private fun StudioScreen(projectId: String, onBack: () -> Unit, vm: StudioViewModel) {
-    LaunchedEffect(projectId) { vm.load(projectId) }
-    val s by vm.state.collectAsStateWithLifecycle()
+    val vm = viewModel(viewModelStoreOwner = owner) { StudioViewModel(app, projectId) }
+    val session = vm.session
+    val s by session.state.collectAsStateWithLifecycle()
     val glyphState by vm.glyphState.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
-    var showExport by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    var export by remember { mutableStateOf<ExportStage>(ExportStage.Closed) }
 
-    BackHandler { vm.pause(); onBack() }
+    BackHandler { session.pause(); onBack() }
     // Nothing plays in the background; pausing also commits a running take.
-    LifecycleEventEffect(Lifecycle.Event.ON_STOP) { vm.pause() }
-    LaunchedEffect(s.message) {
-        s.message?.let { snackbar.showSnackbar(it); vm.consumeMessage() }
-    }
+    LifecycleEventEffect(Lifecycle.Event.ON_STOP) { session.pause() }
+    LaunchedEffect(session) { session.messages.collect { snackbar.showSnackbar(it) } }
 
     StudioLayout(
         s = s,
+        controls = vm.controls,
         glyphState = glyphState,
-        track = vm.document,
-        waveform = vm.waveform,
-        actions = vm,
+        actions = session,
         snackbar = snackbar,
-        onBack = { vm.pause(); onBack() },
-        onExport = { showExport = true },
+        onBack = { session.pause(); onBack() },
+        onExport = { export = ExportStage.Form },
     )
 
-    if (showExport) {
-        ExportDialog(vm, s, onDismiss = { showExport = false; vm.dismissExport() })
+    val open = s as? StudioState.Open
+    if (open != null && export != ExportStage.Closed) {
+        ExportDialog(
+            stage = export,
+            phase = open.phase,
+            name = open.name,
+            onExport = { title ->
+                export = ExportStage.Encoding
+                scope.launch {
+                    export = session.export(title).fold({ ExportStage.Saved(it) }, { ExportStage.Form })
+                }
+            },
+            onSetRingtone = { ringtone ->
+                val message = if (ringtone.setAsDefault()) "Set as your ringtone" else "Allow \"Modify system settings\", then tap again"
+                scope.launch { snackbar.showSnackbar(message) }
+            },
+            onDismiss = { export = ExportStage.Closed },
+        )
     }
 }
 
 /** The whole Studio screen as a pure function of its state; also used by screenshot tests. */
 @Composable
 internal fun StudioLayout(
-    s: StudioUiState,
+    s: StudioState,
+    controls: StudioControls,
     glyphState: GlyphController.State,
-    track: LightFrames?,
-    waveform: FloatArray,
     actions: StudioActions,
     snackbar: SnackbarHostState,
     onBack: () -> Unit,
     onExport: () -> Unit,
-    initialMode: StudioMode = StudioMode.COMPOSE,
 ) {
-    var mode by rememberSaveable { mutableStateOf(initialMode) }
-    val ready = s.loading == null && track != null
-
+    val open = s as? StudioState.Open
     Scaffold(
         containerColor = Color.Black,
         snackbarHost = { SnackbarHost(snackbar) },
-        bottomBar = { if (ready) TransportBar(s, actions) },
+        bottomBar = { if (open != null) TransportBar(open, actions) },
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
             Row(
@@ -152,26 +149,22 @@ internal fun StudioLayout(
             ) {
                 CircleButton(Icons.AutoMirrored.Filled.ArrowBack, "Back", onBack, size = 48.dp)
                 Spacer(Modifier.width(10.dp))
-                if (ready) {
+                if (open != null) {
                     SegmentedPills(
                         options = StudioMode.entries.map { it.label },
-                        selected = mode.ordinal,
-                        onSelect = { mode = StudioMode.entries[it] },
+                        selected = controls.mode.ordinal,
+                        onSelect = { controls.mode = StudioMode.entries[it] },
                         modifier = Modifier.weight(1f),
+                        enabled = open.phase.canEdit,
                     )
                 } else {
                     Spacer(Modifier.weight(1f))
                 }
                 Spacer(Modifier.width(10.dp))
-                CircleButton(AppIcons.Upload, "Export ringtone", onExport, enabled = ready, size = 48.dp)
+                CircleButton(AppIcons.Upload, "Export ringtone", onExport, enabled = open?.phase?.canEdit == true, size = 48.dp)
             }
-            val loading = s.loading
-            if (loading != null) {
-                Column(
-                    Modifier.fillMaxSize().padding(32.dp),
-                    verticalArrangement = Arrangement.Center,
-                ) {
-                    Text(loading, style = MaterialTheme.typography.headlineMedium)
+            when (s) {
+                is StudioState.Loading -> StatusBody(s.label) {
                     Spacer(Modifier.height(20.dp))
                     LinearProgressIndicator(
                         progress = { s.progress },
@@ -182,22 +175,31 @@ internal fun StudioLayout(
                         drawStopIndicator = {},
                     )
                 }
-            } else if (track != null) {
-                StudioHeader(s, glyphState)
-                when (mode) {
-                    // Record is one fixed screen: lights and pads visible together, no scrolling.
-                    StudioMode.RECORD -> RecordLayout(actions, s, Modifier.weight(1f))
-                    else -> StudioScroll(track, waveform, actions, s, mode)
+                is StudioState.Failed -> StatusBody(s.message) {}
+                is StudioState.Open -> {
+                    StudioHeader(s, glyphState)
+                    when (controls.mode) {
+                        // Record is one fixed screen: lights and pads visible together, no scrolling.
+                        StudioMode.RECORD -> RecordLayout(actions, s, controls, Modifier.weight(1f))
+                        else -> StudioScroll(s, controls, actions)
+                    }
                 }
             }
         }
     }
 }
 
-enum class StudioMode(val label: String) { COMPOSE("Compose"), EDIT("Edit"), RECORD("Record") }
+/** A headline in the middle of the screen, for loading and errors. */
+@Composable
+private fun StatusBody(headline: String, below: @Composable () -> Unit) {
+    Column(Modifier.fillMaxSize().padding(32.dp), verticalArrangement = Arrangement.Center) {
+        Text(headline, style = MaterialTheme.typography.headlineMedium)
+        below()
+    }
+}
 
 @Composable
-private fun StudioHeader(s: StudioUiState, glyphState: GlyphController.State) {
+private fun StudioHeader(s: StudioState.Open, glyphState: GlyphController.State) {
     Column(Modifier.padding(horizontal = 24.dp).padding(top = 8.dp)) {
         Text(s.name, style = MaterialTheme.typography.headlineMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
         Spacer(Modifier.height(8.dp))
@@ -223,33 +225,26 @@ private fun StudioHeader(s: StudioUiState, glyphState: GlyphController.State) {
     }
 }
 
-
 /** Compose and Edit: preview, timeline and the mode's controls in one scrolling column. */
 @Composable
-private fun StudioScroll(
-    track: LightFrames,
-    waveform: FloatArray,
-    vm: StudioActions,
-    s: StudioUiState,
-    mode: StudioMode,
-) {
+private fun StudioScroll(s: StudioState.Open, controls: StudioControls, actions: StudioActions) {
     val timeline = remember { TimelineState() }
-    val editing = mode == StudioMode.EDIT
+    val editing = controls.mode == StudioMode.EDIT
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp)) {
         GlyphPreview(
             levels = s.lights::get,
             // Zone picking only means something in Edit.
-            selected = if (editing) s.selectedZones else emptySet(),
-            onZoneTap = { if (editing) vm.toggleZone(it) },
+            selected = if (editing) controls.selectedZones else emptySet(),
+            onZoneTap = { if (editing) controls.toggleZone(it) },
             modifier = Modifier.fillMaxWidth().height(PreviewHeight),
         )
         if (editing) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally)) {
                 for (strip in GlyphZones.stripOrder) {
-                    TogglePill(strip.displayName, s.selectedZones.containsAll(strip.zones.toList()), { vm.selectStrip(strip) })
+                    TogglePill(strip.displayName, controls.selectedZones.containsAll(strip.zones.toList()), { controls.toggleStrip(strip) })
                 }
-                TogglePill("All", s.selectedZones.size == GlyphZones.COUNT, { vm.selectStrip(null) })
+                TogglePill("All", controls.selectedZones.size == GlyphZones.COUNT, { controls.toggleStrip(null) })
             }
             Spacer(Modifier.height(20.dp))
         } else {
@@ -258,15 +253,15 @@ private fun StudioScroll(
 
         NCard(Modifier.fillMaxWidth()) {
             Timeline(
-                track = track,
-                waveform = waveform,
+                track = s.track,
+                waveform = s.waveform,
                 revision = s.revision,
                 playhead = s.playhead,
-                playing = s.playing,
-                selection = s.selection,
+                playing = s.phase == Phase.Playing,
+                selection = controls.selection,
                 state = timeline,
-                onSeek = vm::seek,
-                onSelect = vm::setSelection,
+                onSeek = actions::seek,
+                onSelect = controls::select,
                 modifier = Modifier.fillMaxWidth().height(190.dp).padding(vertical = 14.dp),
             )
         }
@@ -276,21 +271,21 @@ private fun StudioScroll(
             color = Muted.copy(alpha = 0.6f),
             modifier = Modifier.padding(top = 10.dp, start = 4.dp, bottom = 24.dp),
         )
-        if (editing) EditPanel(vm, s) else ComposePanel(vm, s)
+        if (editing) EditPanel(actions, controls) else ComposePanel(actions, controls)
         Spacer(Modifier.height(24.dp))
     }
 }
 
 @Composable
-private fun ComposePanel(vm: StudioActions, s: StudioUiState) {
-    val p = s.composer
+private fun ComposePanel(actions: StudioActions, controls: StudioControls) {
+    val p = controls.composer
     // 2 x 2 grid of style cards.
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         for (row in ComposerStyle.entries.chunked(2)) {
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 for (style in row) {
                     val selected = p.style == style
-                    NCard(Modifier.weight(1f).height(96.dp), selected = selected, onClick = { vm.setComposer(p.copy(style = style)) }) {
+                    NCard(Modifier.weight(1f).height(96.dp), selected = selected, onClick = { controls.composer = p.copy(style = style) }) {
                         Column(Modifier.padding(16.dp)) {
                             Text(style.label, style = MaterialTheme.typography.titleMedium)
                             Spacer(Modifier.height(4.dp))
@@ -307,70 +302,92 @@ private fun ComposePanel(vm: StudioActions, s: StudioUiState) {
     }
     Spacer(Modifier.height(20.dp))
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        PillSlider("Sensitivity", p.sensitivity, 0f..1f, "${(p.sensitivity * 100).toInt()}%", { vm.setComposer(p.copy(sensitivity = it)) })
-        PillSlider("Fade", p.releaseMs, 60f..800f, "${p.releaseMs.toInt()}MS", { vm.setComposer(p.copy(releaseMs = it)) })
-        PillSlider("Brightness", p.intensity, 0.1f..1f, "${(p.intensity * 100).toInt()}%", { vm.setComposer(p.copy(intensity = it)) })
+        PillSlider("Sensitivity", p.sensitivity, 0f..1f, "${(p.sensitivity * 100).toInt()}%", { controls.composer = p.copy(sensitivity = it) })
+        PillSlider("Fade", p.releaseMs, 60f..800f, "${p.releaseMs.toInt()}MS", { controls.composer = p.copy(releaseMs = it) })
+        PillSlider("Brightness", p.intensity, 0.1f..1f, "${(p.intensity * 100).toInt()}%", { controls.composer = p.copy(intensity = it) })
     }
     Spacer(Modifier.height(20.dp))
     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        PillButton("Compose song", { vm.autoCompose(selectionOnly = false) }, Modifier.weight(1f), style = PillStyle.WHITE)
-        PillButton("Selection", { vm.autoCompose(selectionOnly = true) }, Modifier.weight(1f), style = PillStyle.GREY, enabled = s.selection != null)
+        PillButton("Compose song", { actions.compose(p, null) }, Modifier.weight(1f), style = PillStyle.WHITE)
+        val selection = controls.selection
+        PillButton(
+            "Selection",
+            { if (selection != null) actions.compose(p, selection) },
+            Modifier.weight(1f),
+            style = PillStyle.GREY,
+            enabled = selection != null,
+        )
     }
 }
 
 /** Undo · Play · Redo, pinned to the bottom like the Nothing X action row. */
 @Composable
-private fun TransportBar(s: StudioUiState, actions: StudioActions) {
+private fun TransportBar(s: StudioState.Open, actions: StudioActions) {
+    val editable = s.phase.canEdit
     Row(
         Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 20.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        CircleButton(AppIcons.Undo, "Undo", actions::undo, enabled = s.canUndo, size = 60.dp)
+        CircleButton(AppIcons.Undo, "Undo", actions::undo, enabled = editable && s.canUndo, size = 60.dp)
         Spacer(Modifier.width(12.dp))
         PillButton(
-            when {
-                s.recording -> "Stop recording"
-                s.playing -> "Pause"
+            when (s.phase) {
+                Phase.Recording -> "Stop recording"
+                Phase.Playing -> "Pause"
                 else -> "Play"
             },
             actions::togglePlay,
             Modifier.weight(1f),
-            icon = when {
-                s.recording -> AppIcons.Stop
-                s.playing -> AppIcons.Pause
+            enabled = s.phase !is Phase.Exporting,
+            icon = when (s.phase) {
+                Phase.Recording -> AppIcons.Stop
+                Phase.Playing -> AppIcons.Pause
                 else -> Icons.Filled.PlayArrow
             },
             height = 60.dp,
         )
         Spacer(Modifier.width(12.dp))
-        CircleButton(AppIcons.Redo, "Redo", actions::redo, enabled = s.canRedo, size = 60.dp)
+        CircleButton(AppIcons.Redo, "Redo", actions::redo, enabled = editable && s.canRedo, size = 60.dp)
     }
 }
 
+/** Where the export dialog is; encoding progress itself comes from [Phase.Exporting]. */
+private sealed interface ExportStage {
+    data object Closed : ExportStage
+    data object Form : ExportStage
+    data object Encoding : ExportStage
+    data class Saved(val ringtone: Ringtone) : ExportStage
+}
+
 @Composable
-private fun ExportDialog(vm: StudioViewModel, s: StudioUiState, onDismiss: () -> Unit) {
-    val context = LocalContext.current
-    var title by remember { mutableStateOf(s.name) }
-    val exporting = s.exportProgress != null
-    val exported = s.exportedUri
+private fun ExportDialog(
+    stage: ExportStage,
+    phase: Phase,
+    name: String,
+    onExport: (title: String) -> Unit,
+    onSetRingtone: (Ringtone) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var title by remember { mutableStateOf(name) }
+    val encoding = stage == ExportStage.Encoding
 
     AlertDialog(
-        onDismissRequest = { if (!exporting) onDismiss() },
+        onDismissRequest = { if (!encoding) onDismiss() },
         containerColor = Surface1,
         shape = RoundedCornerShape(28.dp),
-        title = { Text(if (exported != null) "Saved" else "Export ringtone", style = MaterialTheme.typography.headlineMedium) },
+        title = { Text(if (stage is ExportStage.Saved) "Saved" else "Export ringtone", style = MaterialTheme.typography.headlineMedium) },
         text = {
             Column {
-                when {
-                    exported != null -> Text(
+                when (stage) {
+                    is ExportStage.Saved -> Text(
                         "Find it in Settings → Sound → Ringtone, or set it now and the lights play on your next call.",
                         color = Muted,
                     )
-                    exporting -> {
+                    ExportStage.Encoding -> {
                         Text("ENCODING", style = MaterialTheme.typography.labelSmall, color = Muted)
                         Spacer(Modifier.height(12.dp))
                         LinearProgressIndicator(
-                            progress = { s.exportProgress ?: 0f },
+                            progress = { (phase as? Phase.Exporting)?.progress ?: 0f },
                             modifier = Modifier.fillMaxWidth(),
                             color = Color.White,
                             trackColor = Surface2,
@@ -390,15 +407,14 @@ private fun ExportDialog(vm: StudioViewModel, s: StudioUiState, onDismiss: () ->
             }
         },
         confirmButton = {
-            when {
-                exported != null -> PillButton("Set as ringtone", {
-                    if (vm.canSetDefaultRingtone()) vm.setAsRingtone() else context.startActivity(vm.writeSettingsIntent())
-                }, height = 48.dp)
-                !exporting -> PillButton("Export", { vm.export(title.trim().ifEmpty { s.name }) }, height = 48.dp)
+            when (stage) {
+                is ExportStage.Saved -> PillButton("Set as ringtone", { onSetRingtone(stage.ringtone) }, height = 48.dp)
+                ExportStage.Encoding -> Unit
+                else -> PillButton("Export", { onExport(title.trim().ifEmpty { name }) }, height = 48.dp)
             }
         },
         dismissButton = {
-            if (!exporting) PillButton(if (exported != null) "Done" else "Cancel", onDismiss, style = PillStyle.GREY, height = 48.dp)
+            if (!encoding) PillButton(if (stage is ExportStage.Saved) "Done" else "Cancel", onDismiss, style = PillStyle.GREY, height = 48.dp)
         },
     )
 }

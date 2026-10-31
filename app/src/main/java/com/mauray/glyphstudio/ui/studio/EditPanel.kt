@@ -42,13 +42,13 @@ private val paintTools = listOf(
  * Edit: pick a shape, see what it will apply to (time range + lights), then apply it.
  */
 @Composable
-internal fun EditPanel(vm: StudioActions, s: StudioUiState) {
+internal fun EditPanel(actions: StudioActions, controls: StudioControls) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         for (row in paintTools.chunked(3)) {
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 for (tool in row) {
-                    val selected = s.tool == tool
-                    NCard(Modifier.weight(1f).height(92.dp), selected = selected, onClick = { vm.setTool(tool) }) {
+                    val selected = controls.tool == tool
+                    NCard(Modifier.weight(1f).height(92.dp), selected = selected, onClick = { controls.tool = tool }) {
                         Column(Modifier.padding(14.dp)) {
                             val ink = if (selected) Color.Black else Color.White
                             Canvas(Modifier.size(width = 56.dp, height = 26.dp)) { drawToolShape(tool, ink) }
@@ -63,28 +63,28 @@ internal fun EditPanel(vm: StudioActions, s: StudioUiState) {
 
     Spacer(Modifier.height(20.dp))
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        PillSlider("Brightness", s.brightness, 0.05f..1f, "${(s.brightness * 100).toInt()}%", vm::setBrightness)
-        if (s.tool == EditTool.PULSE) {
-            PillSlider("Speed", s.pulseRate, 0.5f..8f, "%.1f/S".format(s.pulseRate), vm::setPulseRate)
+        PillSlider("Brightness", controls.brightness, 0.05f..1f, "${(controls.brightness * 100).toInt()}%", { controls.brightness = it })
+        if (controls.tool == EditTool.PULSE) {
+            PillSlider("Speed", controls.pulseRate, 0.5f..8f, "%.1f/S".format(controls.pulseRate), { controls.pulseRate = it })
         }
     }
 
     Spacer(Modifier.height(20.dp))
     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        val range = s.selection
+        val range = controls.selection
         TargetCard(
             "RANGE",
             if (range != null) "${formatTime(range.first)} – ${formatTime(range.last + 1)}" else null,
             "Drag the timeline",
             Modifier.weight(1f),
         )
-        TargetCard("LIGHTS", describeZones(s.selectedZones), "Tap the lights", Modifier.weight(1f))
+        TargetCard("LIGHTS", describeZones(controls.selectedZones), "Tap the lights", Modifier.weight(1f))
     }
 
     Spacer(Modifier.height(20.dp))
     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        PillButton("Apply ${s.tool.label.lowercase()}", vm::applyTool, Modifier.weight(1.7f), style = PillStyle.WHITE)
-        PillButton("Clear", vm::clearLights, Modifier.weight(1f), style = PillStyle.GREY)
+        PillButton("Apply ${controls.tool.label.lowercase()}", { actions.paint(controls.paint()) }, Modifier.weight(1.7f), style = PillStyle.WHITE)
+        PillButton("Clear", { actions.paint(controls.paint(EditTool.CLEAR)) }, Modifier.weight(1f), style = PillStyle.GREY)
     }
 }
 

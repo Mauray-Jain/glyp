@@ -69,6 +69,7 @@ class TakeRecorder(
         if (playhead >= lastFrame) playhead = 0
         clock.play(frameToMs(playhead))
         startTicking()
+        render()
     }
 
     /** Pauses playback; a running take is committed. Held pads keep glowing. */
@@ -96,6 +97,8 @@ class TakeRecorder(
         take = Take(document.begin(), overdub, written = playhead - 1)
         clock.play(frameToMs(playhead))
         startTicking()
+        // Publish the new state now: callers check [live] to decide what else is allowed.
+        render()
     }
 
     fun stop() = pause()

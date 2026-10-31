@@ -3,6 +3,7 @@ package com.mauray.glyphstudio.model
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import kotlin.coroutines.CoroutineContext
 
@@ -24,6 +25,7 @@ class LightDocument(initial: LightTrack, private val undoBudgetBytes: Long = DEF
     private val undoStack = ArrayDeque<LightTrack>()
     private val redoStack = ArrayDeque<LightTrack>()
     private var open: Transaction? = null
+    private val transactionOpen = MutableStateFlow(false)
 
     private val _revision = MutableStateFlow(0)
 
@@ -63,15 +65,18 @@ class LightDocument(initial: LightTrack, private val undoBudgetBytes: Long = DEF
     fun begin(): Transaction = confined {
         check(open == null) { "A transaction is already open" }
         undoStack.addLast(track.copy())
+        transactionOpen.value = true
         Transaction().also { open = it }
     }
 
     /**
      * Runs [change] on a snapshot in [context] and commits the result as one undo step. If the
-     * document changed while it ran, it starts over on the new content, so no edit is lost.
+     * document changed while it ran, it starts over on the new content, so no edit is lost; an
+     * open transaction (a take) is waited out first.
      */
     suspend fun editInBackground(context: CoroutineContext, change: (LightTrack) -> Unit) {
         while (true) {
+            transactionOpen.first { !it }
             val base = revision.value
             val work = snapshot()
             withContext(context) { change(work) }
@@ -134,6 +139,7 @@ class LightDocument(initial: LightTrack, private val undoBudgetBytes: Long = DEF
         fun commit() = confined {
             check(open === this) { "Transaction already committed" }
             open = null
+            transactionOpen.value = false
             if (touched) {
                 redoStack.clear()
                 changed()

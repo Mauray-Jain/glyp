@@ -1,32 +1,36 @@
 package com.mauray.glyphstudio.ui.studio
 
 import com.mauray.glyphstudio.composer.ComposerParams
-import com.mauray.glyphstudio.glyph.GlyphZones
 import com.mauray.glyphstudio.studio.EditTool
 import com.mauray.glyphstudio.studio.Pad
 
-/** Everything the Studio layout can ask for; implemented by [StudioViewModel]. */
+/** An edit tool applied to [zones] over [frames]; null or empty means "not picked yet". */
+data class PaintRequest(
+    val tool: EditTool,
+    val frames: IntRange?,
+    val zones: Set<Int>,
+    val brightness: Float,
+    val pulseRate: Float,
+)
+
+/**
+ * The commands the Studio layout sends to the session, which accepts or rejects each one for
+ * the current phase. Plain settings stay in [StudioControls].
+ */
 interface StudioActions {
     fun togglePlay()
     fun seek(frame: Int)
-    fun setSelection(range: IntRange?)
-    fun toggleZone(zone: Int)
-    fun selectStrip(strip: GlyphZones.Strip?)
-    fun clearZones()
-    fun setComposer(params: ComposerParams)
-    fun setTool(tool: EditTool)
-    fun setBrightness(v: Float)
-    fun setPulseRate(v: Float)
-    fun autoCompose(selectionOnly: Boolean)
-    fun applyTool()
-    fun clearLights()
+
+    /** Regenerates [range] (or the whole song when null) in the given style. */
+    fun compose(params: ComposerParams, range: IntRange?)
+    fun paint(request: PaintRequest)
     fun undo()
     fun redo()
 
-    // Record mode
-    fun pressPad(pad: Pad)
+    /** [level] is the pad brightness, 0..1. */
+    fun pressPad(pad: Pad, level: Float)
     fun releasePad(pad: Pad)
-    fun toggleRecord()
-    fun setOverdub(overdub: Boolean)
-    fun setPadBrightness(v: Float)
+
+    /** Starts a take from the playhead (layering over the lights with [overdub]) or stops it. */
+    fun toggleRecord(overdub: Boolean)
 }

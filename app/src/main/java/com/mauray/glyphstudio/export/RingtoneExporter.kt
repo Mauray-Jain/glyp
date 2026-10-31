@@ -14,6 +14,18 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
 
+/** Everything an export needs; [lights] is a snapshot, read off the main thread. */
+class ExportJob(val title: String, val audioFile: File, val lights: LightTrack, val durationMs: Long)
+
+/** A ringtone that has been saved to the device. */
+interface Ringtone {
+    /**
+     * Makes this the default ringtone. Returns false, after opening the "Modify system
+     * settings" screen, when the app is not allowed to yet.
+     */
+    fun setAsDefault(): Boolean
+}
+
 /**
  * Exports a project as a Glyph ringtone: Ogg Opus audio with the light data in its tags,
  * saved to Ringtones/Glyph Studio so it shows up in the system ringtone picker.
@@ -22,43 +34,38 @@ class RingtoneExporter(context: Context) {
 
     private val appContext = context.applicationContext
 
-    /** [lights] must be a snapshot: it is read on the IO dispatcher. */
-    suspend fun export(
-        audioFile: File,
-        lights: LightTrack,
-        durationMs: Long,
-        title: String,
-        onProgress: (Float) -> Unit = {},
-    ): Uri = withContext(Dispatchers.IO) {
+    suspend fun export(job: ExportJob, onProgress: (Float) -> Unit = {}): Ringtone = withContext(Dispatchers.IO) {
         val work = File(appContext.cacheDir, "export").apply { mkdirs() }
         val opus = File(work, "audio.ogg")
         val tagged = File(work, "tagged.ogg")
 
-        if (isOggOpus(audioFile)) {
-            audioFile.copyTo(opus, overwrite = true)
+        if (isOggOpus(job.audioFile)) {
+            job.audioFile.copyTo(opus, overwrite = true)
             onProgress(0.8f)
         } else {
-            val pcm = AudioDecoder.decode(audioFile) { onProgress(it * 0.4f) }
+            val pcm = AudioDecoder.decode(job.audioFile) { onProgress(it * 0.4f) }
             OpusTranscoder.encode(pcm, opus) { onProgress(0.4f + it * 0.4f) }
         }
-        OggOpusTagger.retag(opus, tagged, GlyphMetadata.tags(title, lights, durationMs))
-        val uri = publish(tagged, title)
+        OggOpusTagger.retag(opus, tagged, GlyphMetadata.tags(job.title, job.lights, job.durationMs))
+        val uri = publish(tagged, job.title)
         opus.delete()
         tagged.delete()
         onProgress(1f)
-        uri
+        object : Ringtone {
+            override fun setAsDefault() = setAsDefaultRingtone(uri)
+        }
     }
 
-    /** Needs the "Modify system settings" special permission; see [writeSettingsIntent]. */
-    fun setAsDefaultRingtone(uri: Uri): Boolean {
-        if (!Settings.System.canWrite(appContext)) return false
+    /** Setting the default needs the "Modify system settings" special permission. */
+    private fun setAsDefaultRingtone(uri: Uri): Boolean {
+        if (!Settings.System.canWrite(appContext)) {
+            val intent = Intent(Settings.ACTION_MANAGE_WRITE_SETTINGS, Uri.parse("package:${appContext.packageName}"))
+            appContext.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            return false
+        }
         RingtoneManager.setActualDefaultRingtoneUri(appContext, RingtoneManager.TYPE_RINGTONE, uri)
         return true
     }
-
-    fun canSetDefault() = Settings.System.canWrite(appContext)
-
-    fun writeSettingsIntent() = Intent(Settings.ACTION_MANAGE_WRITE_SETTINGS, Uri.parse("package:${appContext.packageName}"))
 
     private fun publish(file: File, title: String): Uri {
         val resolver = appContext.contentResolver

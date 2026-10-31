@@ -21,19 +21,22 @@ import com.mauray.glyphstudio.studio.EditTool
 import com.mauray.glyphstudio.studio.Pad
 import com.mauray.glyphstudio.ui.home.HomeLayout
 import com.mauray.glyphstudio.ui.home.StartChoice
+import com.mauray.glyphstudio.ui.studio.PaintRequest
+import com.mauray.glyphstudio.ui.studio.Phase
 import com.mauray.glyphstudio.ui.studio.StudioActions
+import com.mauray.glyphstudio.ui.studio.StudioControls
 import com.mauray.glyphstudio.ui.studio.StudioLayout
 import com.mauray.glyphstudio.ui.studio.StudioMode
-import com.mauray.glyphstudio.ui.studio.StudioUiState
+import com.mauray.glyphstudio.ui.studio.StudioState
 import com.mauray.glyphstudio.ui.theme.GlyphStudioTheme
-import org.junit.Rule
-import org.junit.Test
 import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.exp
 import kotlin.math.max
 import kotlin.math.sin
 import kotlin.random.Random
+import org.junit.Rule
+import org.junit.Test
 
 /** Renders the real screens with a composition generated from a synthetic beat. */
 class ScreenshotTest {
@@ -87,35 +90,34 @@ class ScreenshotTest {
     ) {
         if (tall) paparazzi.unsafeUpdateConfig(DeviceConfig.PIXEL_6.copy(screenHeight = 3500))
         val (track, wave) = demoTrack()
-        val state = StudioUiState(
-            loading = null,
+        val state = StudioState.Open(
+            phase = if (recording) Phase.Recording else Phase.Idle,
             name = "Midnight Drive",
-            frameCount = track.frameCount,
+            track = track,
+            waveform = wave,
             playhead = 214,
-            selectedZones = GlyphZones.Strip.A.zones.toSet(),
-            composer = ComposerParams(ComposerStyle.PULSE),
-            tool = tool,
-            canUndo = true,
-            revision = 1,
-            recording = recording,
-            playing = recording,
-            heldPads = held,
             lights = IntArray(GlyphZones.COUNT) { z ->
                 if (held.any { z in it.zones }) GlyphZones.MAX_BRIGHTNESS else track[214, z]
             },
-            selection = if (recording) null else 150..270,
+            heldPads = held,
+            revision = 1,
+            canUndo = true,
+            canRedo = false,
         )
+        val controls = StudioControls(StudioMode.entries[tab]).apply {
+            this.tool = tool
+            selectedZones = GlyphZones.Strip.A.zones.toSet()
+            if (!recording) select(150..270)
+        }
         snap {
             StudioLayout(
                 s = state,
+                controls = controls,
                 glyphState = GlyphController.State.READY,
-                track = track,
-                waveform = wave,
                 actions = NoActions,
                 snackbar = SnackbarHostState(),
                 onBack = {},
                 onExport = {},
-                initialMode = StudioMode.entries[tab],
             )
         }
     }
@@ -150,23 +152,12 @@ class ScreenshotTest {
     private object NoActions : StudioActions {
         override fun togglePlay() {}
         override fun seek(frame: Int) {}
-        override fun setSelection(range: IntRange?) {}
-        override fun toggleZone(zone: Int) {}
-        override fun selectStrip(strip: GlyphZones.Strip?) {}
-        override fun clearZones() {}
-        override fun setComposer(params: ComposerParams) {}
-        override fun setTool(tool: EditTool) {}
-        override fun setBrightness(v: Float) {}
-        override fun setPulseRate(v: Float) {}
-        override fun autoCompose(selectionOnly: Boolean) {}
-        override fun applyTool() {}
-        override fun clearLights() {}
+        override fun compose(params: ComposerParams, range: IntRange?) {}
+        override fun paint(request: PaintRequest) {}
         override fun undo() {}
         override fun redo() {}
-        override fun pressPad(pad: Pad) {}
+        override fun pressPad(pad: Pad, level: Float) {}
         override fun releasePad(pad: Pad) {}
-        override fun toggleRecord() {}
-        override fun setOverdub(overdub: Boolean) {}
-        override fun setPadBrightness(v: Float) {}
+        override fun toggleRecord(overdub: Boolean) {}
     }
 }

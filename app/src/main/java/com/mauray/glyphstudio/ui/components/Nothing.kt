@@ -30,6 +30,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
@@ -225,11 +226,19 @@ private fun SliderLabels(label: String, value: String, labelColor: Color, valueC
  * Pill-shaped segmented switch: grey track, the active segment is a white pill. Each segment
  * gets its label's natural width plus an equal share of the spare room, so long labels
  * ("Compose") never crowd the edges while short ones ("Edit") don't float in a huge pill.
+ * Disabled, the whole switch dims and ignores taps.
  */
 @Composable
-fun SegmentedPills(options: List<String>, selected: Int, onSelect: (Int) -> Unit, modifier: Modifier = Modifier) {
+fun SegmentedPills(
+    options: List<String>,
+    selected: Int,
+    onSelect: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+) {
     Layout(
         modifier = modifier
+            .alpha(if (enabled) 1f else 0.4f)
             .height(48.dp)
             .clip(CircleShape)
             .background(Surface1)
@@ -241,7 +250,7 @@ fun SegmentedPills(options: List<String>, selected: Int, onSelect: (Int) -> Unit
                     Modifier
                         .clip(CircleShape)
                         .then(if (active) Modifier.background(Color.White) else Modifier)
-                        .clickable { onSelect(i) }
+                        .clickable(enabled = enabled) { onSelect(i) }
                         .padding(horizontal = 12.dp),
                     contentAlignment = Alignment.Center,
                 ) {

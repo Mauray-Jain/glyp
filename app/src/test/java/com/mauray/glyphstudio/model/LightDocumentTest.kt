@@ -1,6 +1,7 @@
 package com.mauray.glyphstudio.model
 
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -150,5 +151,21 @@ class LightDocumentTest {
         }
         assertEquals(2, runs)
         assertEquals(21, d[0, 0])
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun `background edit waits for an open take`() = runTest {
+        val d = doc()
+        val take = d.begin()
+        take.update { it[0, 0] = 5 }
+        val job = launch { d.editInBackground(StandardTestDispatcher(testScheduler)) { it[0, 0] = it[0, 0] + 1 } }
+        testScheduler.advanceUntilIdle()
+        assertFalse("still waiting", job.isCompleted)
+        take.commit()
+        job.join()
+        assertEquals(6, d[0, 0])
+        d.undo()
+        assertEquals("compose undoes on its own", 5, d[0, 0])
     }
 }
