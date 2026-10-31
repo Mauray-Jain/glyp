@@ -12,7 +12,8 @@ import com.mauray.glyphstudio.composer.AudioAnalyzer
 import com.mauray.glyphstudio.composer.AutoComposer
 import com.mauray.glyphstudio.composer.ComposerParams
 import com.mauray.glyphstudio.glyph.GlyphZones
-import com.mauray.glyphstudio.model.Project
+import com.mauray.glyphstudio.model.LightDocument
+import com.mauray.glyphstudio.model.ProjectMeta
 import com.mauray.glyphstudio.model.frameToMs
 import com.mauray.glyphstudio.model.msToFrame
 import com.mauray.glyphstudio.studio.EditOps
@@ -25,12 +26,15 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import kotlin.math.abs
+import java.io.File
 import kotlin.math.max
 
 data class StudioUiState(
@@ -73,7 +77,11 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions {
     private val _state = MutableStateFlow(StudioUiState())
     val state: StateFlow<StudioUiState> = _state.asStateFlow()
 
-    var project: Project? = null
+    private var meta: ProjectMeta? = null
+    private var audioFile: File? = null
+
+    /** The open project's lights; null until loaded. */
+    var document: LightDocument? = null
         private set
     var analysis: Analysis? = null
         private set
@@ -83,23 +91,25 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions {
 
     private var player: MediaPlayer? = null
     private var playbackJob: Job? = null
-    private val undo = ArrayDeque<ShortArray>()
-    private val redo = ArrayDeque<ShortArray>()
+    private val frameBuffer = ShortArray(GlyphZones.COUNT)
 
     private val performance = PadPerformance()
     private val padLevels = FloatArray(GlyphZones.COUNT)
     private val live = ShortArray(GlyphZones.COUNT)
     private var jamJob: Job? = null
     private var jamStartNanos = 0L
+    /** The recording in progress, one undo step; null when not recording. */
+    private var take: LightDocument.Transaction? = null
     /** Last frame written by the current take. */
     private var lastRecorded = -1
 
     fun load(id: String) {
-        if (project != null) return
+        if (document != null) return
         viewModelScope.launch {
             try {
                 val p = store.load(id)
-                project = p
+                meta = p.meta
+                audioFile = p.audioFile
                 _state.update { it.copy(name = p.meta.name, frameCount = p.lights.frameCount, loading = "Listening to the track…") }
                 val (a, wave) = withContext(Dispatchers.Default) {
                     val pcm = AudioDecoder.decode(p.audioFile) { pr -> _state.update { it.copy(progress = pr * 0.4f) } }
@@ -114,16 +124,26 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions {
                 // A new project (unless started blank) gets its automatic composition once.
                 if (p.meta.pendingAutoCompose) {
                     withContext(Dispatchers.Default) { AutoComposer.compose(a, _state.value.composer, p.lights) }
-                    project = store.save(p, pendingAutoCompose = false)
+                    meta = store.save(p.meta.copy(pendingAutoCompose = false), p.lights)
                 }
+                val doc = LightDocument(p.lights)
+                document = doc
+                // Debounced autosave: half a second after the last change, from a snapshot.
+                viewModelScope.launch { doc.revision.drop(1).collectLatest { delay(500); save() } }
                 player = MediaPlayer().apply {
                     setDataSource(p.audioFile.absolutePath)
                     prepare()
                     // Reaching the end of the song also ends a take, keeping what was recorded.
                     setOnCompletionListener { if (_state.value.recording) finishRecording() else pause() }
                 }
-                _state.update { it.copy(loading = null, revision = it.revision + 1) }
-                showFrame(0)
+                // Every change to the lights redraws the timeline and the Glyphs.
+                viewModelScope.launch {
+                    doc.revision.collect { rev ->
+                        _state.update { it.copy(revision = rev, canUndo = doc.canUndo, canRedo = doc.canRedo) }
+                        if (take == null) showFrame(_state.value.playhead)
+                    }
+                }
+                _state.update { it.copy(loading = null) }
             } catch (e: Exception) {
                 _state.update { it.copy(loading = null, message = "Couldn't open project: ${e.message}") }
             }
@@ -158,7 +178,7 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions {
                         _state.value.recording -> {
                             recordUpTo(frame)
                             // Let the timeline catch up ~10x a second while recording.
-                            if (++ticks % 6 == 0) _state.update { it.copy(revision = it.revision + 1) }
+                            if (++ticks % 6 == 0) take?.publish()
                             showFrame(frame)
                         }
                         !performance.isIdle(frame) -> showLive(frame, frame)
@@ -191,8 +211,10 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions {
 
     /** Pushes the given frame to the real Glyph lights. */
     fun showFrame(frame: Int) {
-        val track = project?.lights ?: return
-        if (frame in 0 until track.frameCount) glyphApp.glyph.show(track.data, track.offsetOf(frame))
+        val doc = document ?: return
+        if (frame !in 0 until doc.frameCount) return
+        doc.copyFrame(frame, frameBuffer)
+        glyphApp.glyph.show(frameBuffer)
     }
 
     // endregion
@@ -226,14 +248,12 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions {
 
     /** Regenerates the selection (or the whole song) with the current composer settings. */
     override fun autoCompose(selectionOnly: Boolean) {
-        val p = project ?: return
+        val doc = document ?: return
         val a = analysis ?: return
         val s = _state.value
-        val range = if (selectionOnly) s.selection ?: return else 0 until p.lights.frameCount
+        val range = if (selectionOnly) s.selection ?: return else 0 until doc.frameCount
         viewModelScope.launch {
-            checkpoint()
-            withContext(Dispatchers.Default) { AutoComposer.compose(a, s.composer, p.lights, range) }
-            changed()
+            doc.editInBackground(Dispatchers.Default) { AutoComposer.compose(a, s.composer, it, range) }
         }
     }
 
@@ -243,7 +263,7 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions {
     override fun clearLights() = apply(EditTool.CLEAR)
 
     private fun apply(tool: EditTool) {
-        val p = project ?: return
+        val doc = document ?: return
         val s = _state.value
         val range = s.selection
         if (range == null) {
@@ -254,51 +274,27 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions {
             _state.update { it.copy(message = "Tap the lights or pick a strip first") }
             return
         }
-        checkpoint()
         // Sweeps travel in strip order C → A → B, each strip in its own zone order.
         val zones = GlyphZones.stripOrder.flatMap { strip -> strip.zones.filter { it in s.selectedZones } }
-        EditOps.apply(p.lights, tool, range, zones, s.brightness, s.pulseRate)
-        changed()
+        doc.edit { EditOps.apply(it, tool, range, zones, s.brightness, s.pulseRate) }
     }
 
-    override fun undo() = swapHistory(undo, redo)
-    override fun redo() = swapHistory(redo, undo)
+    override fun undo() { document?.undo() }
+    override fun redo() { document?.redo() }
 
-    private fun swapHistory(from: ArrayDeque<ShortArray>, to: ArrayDeque<ShortArray>) {
-        val track = project?.lights ?: return
-        val snapshot = from.removeLastOrNull() ?: return
-        to.addLast(track.data.copyOf())
-        snapshot.copyInto(track.data)
-        changed()
-    }
-
-    private fun checkpoint() {
-        val track = project?.lights ?: return
-        undo.addLast(track.data.copyOf())
-        if (undo.size > MAX_UNDO) undo.removeFirst()
-        redo.clear()
-    }
-
-    private fun changed() {
-        _state.update { it.copy(revision = it.revision + 1, canUndo = undo.isNotEmpty(), canRedo = redo.isNotEmpty()) }
-        showFrame(_state.value.playhead)
-        persist()
-    }
-
-    private var saveJob: Job? = null
-
-    private fun persist() {
-        val p = project ?: return
-        saveJob?.cancel()
-        saveJob = viewModelScope.launch {
-            delay(500)
-            project = store.save(p, _state.value.name)
-        }
+    /** Writes a snapshot if anything changed since the last save. */
+    private suspend fun save() {
+        val doc = document ?: return
+        val m = meta ?: return
+        if (!doc.dirty && m.name == _state.value.name) return
+        val revision = doc.revision.value
+        meta = store.save(m.copy(name = _state.value.name), doc.snapshot())
+        doc.markSaved(revision)
     }
 
     fun rename(name: String) {
         _state.update { it.copy(name = name) }
-        persist()
+        viewModelScope.launch { save() }
     }
 
     // endregion
@@ -309,7 +305,7 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions {
     override fun setPadBrightness(v: Float) = _state.update { it.copy(padBrightness = v) }
 
     override fun pressPad(pad: Pad) {
-        if (project == null) return
+        if (document == null) return
         if (!_state.value.playing && performance.isIdle(jamFrame())) jamStartNanos = System.nanoTime()
         performance.press(pad, clockFrame())
         _state.update { it.copy(heldPads = performance.heldPads) }
@@ -327,8 +323,8 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions {
             finishRecording()
             return
         }
-        if (project == null) return
-        checkpoint()
+        val doc = document ?: return
+        take = doc.begin()
         val s = _state.value
         val start = if (s.playhead >= s.frameCount - 1) 0 else s.playhead
         seek(start)
@@ -340,21 +336,24 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions {
 
     private fun finishRecording() {
         recordUpTo(_state.value.playhead)
+        take?.commit()
+        take = null
         _state.update { it.copy(recording = false) }
         pause()
-        changed()
     }
 
     /** Writes pad levels for every frame since the last write, on the song clock. */
     private fun recordUpTo(frame: Int) {
-        val track = project?.lights ?: return
+        val tx = take ?: return
         val s = _state.value
         val peak = s.padBrightness * GlyphZones.MAX_BRIGHTNESS
-        for (f in (lastRecorded + 1)..minOf(frame, track.frameCount - 1)) {
-            performance.levelsAt(f, padLevels)
-            for (z in 0 until GlyphZones.COUNT) {
-                val v = (padLevels[z] * peak).toInt()
-                track[f, z] = if (s.overdub) max(track[f, z], v) else v
+        tx.update { track ->
+            for (f in (lastRecorded + 1)..minOf(frame, track.frameCount - 1)) {
+                performance.levelsAt(f, padLevels)
+                for (z in 0 until GlyphZones.COUNT) {
+                    val v = (padLevels[z] * peak).toInt()
+                    track[f, z] = if (s.overdub) max(track[f, z], v) else v
+                }
             }
         }
         lastRecorded = max(lastRecorded, frame)
@@ -388,7 +387,7 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions {
 
     /** Shows the track at [trackFrame] with pad levels at [padFrame] on top, without saving. */
     private fun showLive(padFrame: Int, trackFrame: Int) {
-        val track = project?.lights ?: return
+        val track = document ?: return
         val peak = _state.value.padBrightness * GlyphZones.MAX_BRIGHTNESS
         performance.levelsAt(padFrame, padLevels)
         val frame = IntArray(GlyphZones.COUNT) { z ->
@@ -404,13 +403,17 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions {
     // region export
 
     fun export(title: String) {
-        val p = project ?: return
+        val doc = document ?: return
+        val audio = audioFile ?: return
+        val m = meta ?: return
         pause()
         viewModelScope.launch {
             _state.update { it.copy(exportProgress = 0f, exportedUri = null) }
             try {
                 rename(title)
-                val uri = exporter.export(p, title) { pr -> _state.update { it.copy(exportProgress = pr) } }
+                val uri = exporter.export(audio, doc.snapshot(), m.durationMs, title) { pr ->
+                    _state.update { it.copy(exportProgress = pr) }
+                }
                 _state.update { it.copy(exportProgress = null, exportedUri = uri, message = "Saved to Ringtones/Glyph Studio") }
             } catch (e: Exception) {
                 _state.update { it.copy(exportProgress = null, message = "Export failed: ${e.message}") }
@@ -438,10 +441,11 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions {
         jamJob?.cancel()
         player?.release()
         glyphApp.glyph.off()
-        project?.let { p ->
-            // viewModelScope is gone; a short blocking save keeps the last edit.
-            runBlocking { store.save(p, _state.value.name) }
-        }
+        // Leaving mid-take keeps what was recorded.
+        take?.commit()
+        take = null
+        // viewModelScope is gone; a short blocking save keeps the last edit.
+        runBlocking { save() }
     }
 
     private fun peaks(mono: FloatArray, sampleRate: Int, frames: Int): FloatArray {
@@ -459,7 +463,4 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions {
         return out
     }
 
-    private companion object {
-        const val MAX_UNDO = 30
-    }
 }

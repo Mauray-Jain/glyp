@@ -9,7 +9,7 @@ import android.os.Environment
 import android.provider.MediaStore
 import android.provider.Settings
 import com.mauray.glyphstudio.audio.AudioDecoder
-import com.mauray.glyphstudio.model.Project
+import com.mauray.glyphstudio.model.LightTrack
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -22,19 +22,26 @@ class RingtoneExporter(context: Context) {
 
     private val appContext = context.applicationContext
 
-    suspend fun export(project: Project, title: String, onProgress: (Float) -> Unit = {}): Uri = withContext(Dispatchers.IO) {
+    /** [lights] must be a snapshot: it is read on the IO dispatcher. */
+    suspend fun export(
+        audioFile: File,
+        lights: LightTrack,
+        durationMs: Long,
+        title: String,
+        onProgress: (Float) -> Unit = {},
+    ): Uri = withContext(Dispatchers.IO) {
         val work = File(appContext.cacheDir, "export").apply { mkdirs() }
         val opus = File(work, "audio.ogg")
         val tagged = File(work, "tagged.ogg")
 
-        if (isOggOpus(project.audioFile)) {
-            project.audioFile.copyTo(opus, overwrite = true)
+        if (isOggOpus(audioFile)) {
+            audioFile.copyTo(opus, overwrite = true)
             onProgress(0.8f)
         } else {
-            val pcm = AudioDecoder.decode(project.audioFile) { onProgress(it * 0.4f) }
+            val pcm = AudioDecoder.decode(audioFile) { onProgress(it * 0.4f) }
             OpusTranscoder.encode(pcm, opus) { onProgress(0.4f + it * 0.4f) }
         }
-        OggOpusTagger.retag(opus, tagged, GlyphMetadata.tags(title, project.lights, project.meta.durationMs))
+        OggOpusTagger.retag(opus, tagged, GlyphMetadata.tags(title, lights, durationMs))
         val uri = publish(tagged, title)
         opus.delete()
         tagged.delete()

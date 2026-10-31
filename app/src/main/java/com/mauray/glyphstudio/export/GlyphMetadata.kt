@@ -1,6 +1,7 @@
 package com.mauray.glyphstudio.export
 
 import com.mauray.glyphstudio.glyph.GlyphZones
+import com.mauray.glyphstudio.model.LightFrames
 import com.mauray.glyphstudio.model.LightTrack
 import com.mauray.glyphstudio.model.frameToMs
 import java.io.ByteArrayOutputStream
@@ -22,7 +23,7 @@ object GlyphMetadata {
     const val COMPOSER = "v1-Asteroids Glyph Composer"
     const val COLUMNS = "36cols"
 
-    fun tags(title: String, track: LightTrack, durationMs: Long): List<Pair<String, String>> {
+    fun tags(title: String, track: LightFrames, durationMs: Long): List<Pair<String, String>> {
         // Light data longer than the audio is ignored by the player, so trim it.
         val frames = minOf(track.frameCount, LightTrack.framesForDuration(durationMs))
         return listOf(
@@ -35,7 +36,7 @@ object GlyphMetadata {
         )
     }
 
-    fun csv(track: LightTrack, frames: Int): ByteArray {
+    fun csv(track: LightFrames, frames: Int): ByteArray {
         val sb = StringBuilder(frames * GlyphZones.COUNT * 5)
         for (t in 0 until frames) {
             for (z in 0 until GlyphZones.COUNT) sb.append(track[t, z]).append(',')
@@ -45,7 +46,7 @@ object GlyphMetadata {
     }
 
     /** One dot per strip each time it switches on, so the Composer app has something to show. */
-    fun timelineDots(track: LightTrack, frames: Int): ByteArray {
+    fun timelineDots(track: LightFrames, frames: Int): ByteArray {
         val sb = StringBuilder()
         val wasOn = BooleanArray(GlyphZones.Strip.entries.size)
         for (t in 0 until frames) {

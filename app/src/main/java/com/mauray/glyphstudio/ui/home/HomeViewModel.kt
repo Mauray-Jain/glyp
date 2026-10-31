@@ -3,6 +3,7 @@ package com.mauray.glyphstudio.ui.home
 import android.app.Application
 import android.media.MediaMetadataRetriever
 import android.net.Uri
+import android.provider.OpenableColumns
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.mauray.glyphstudio.GlyphStudioApp
@@ -37,7 +38,12 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
             try {
                 val duration = withContext(Dispatchers.IO) { durationOf(audio) }
                 require(duration > 0) { "Couldn't read the length of that file" }
-                onCreated(store.create(audio, duration, autoCompose).meta.id)
+                val resolver = getApplication<Application>().contentResolver
+                val fileName = withContext(Dispatchers.IO) { displayNameOf(audio) } ?: "Untitled"
+                val project = store.create(fileName, duration, autoCompose) {
+                    resolver.openInputStream(audio) ?: error("Couldn't open that file")
+                }
+                onCreated(project.meta.id)
             } catch (e: Exception) {
                 _error.value = e.message ?: "Couldn't import that file"
             } finally {
@@ -56,6 +62,11 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
     fun clearError() {
         _error.value = null
     }
+
+    private fun displayNameOf(uri: Uri): String? =
+        getApplication<Application>().contentResolver
+            .query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
+            ?.use { if (it.moveToFirst()) it.getString(0) else null }
 
     private fun durationOf(uri: Uri): Long {
         val retriever = MediaMetadataRetriever()

@@ -53,7 +53,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.mauray.glyphstudio.composer.ComposerStyle
 import com.mauray.glyphstudio.glyph.GlyphController
 import com.mauray.glyphstudio.glyph.GlyphZones
-import com.mauray.glyphstudio.model.LightTrack
+import com.mauray.glyphstudio.model.LightFrames
 import com.mauray.glyphstudio.model.frameToMs
 import com.mauray.glyphstudio.studio.EditTool
 import com.mauray.glyphstudio.ui.AppIcons
@@ -107,7 +107,7 @@ private fun StudioScreen(projectId: String, onBack: () -> Unit, vm: StudioViewMo
     StudioLayout(
         s = s,
         glyphState = glyphState,
-        track = vm.project?.lights,
+        track = vm.document,
         waveform = vm.waveform,
         actions = vm,
         snackbar = snackbar,
@@ -125,7 +125,7 @@ private fun StudioScreen(projectId: String, onBack: () -> Unit, vm: StudioViewMo
 internal fun StudioLayout(
     s: StudioUiState,
     glyphState: GlyphController.State,
-    track: LightTrack?,
+    track: LightFrames?,
     waveform: FloatArray,
     actions: StudioActions,
     snackbar: SnackbarHostState,
@@ -220,7 +220,7 @@ private fun StudioHeader(s: StudioUiState, glyphState: GlyphController.State) {
 }
 
 /** Levels to show on the phone: live pad hits while jamming, otherwise the track at the playhead. */
-internal fun previewLevels(track: LightTrack, s: StudioUiState): (Int) -> Int {
+internal fun previewLevels(track: LightFrames, s: StudioUiState): (Int) -> Int {
     val frame = s.playhead.coerceIn(0, track.frameCount - 1)
     val live = s.liveFrame
     return { zone -> live?.get(zone) ?: track[frame, zone] }
@@ -229,7 +229,7 @@ internal fun previewLevels(track: LightTrack, s: StudioUiState): (Int) -> Int {
 /** Compose and Edit: preview, timeline and the mode's controls in one scrolling column. */
 @Composable
 private fun StudioScroll(
-    track: LightTrack,
+    track: LightFrames,
     waveform: FloatArray,
     vm: StudioActions,
     s: StudioUiState,

@@ -67,15 +67,12 @@ class GlyphController(context: Context) {
         if (_state.value != State.UNSUPPORTED) _state.value = State.CONNECTING
     }
 
-    /**
-     * Shows one frame. [frame] holds [GlyphZones.COUNT] values in 0..[GlyphZones.MAX_BRIGHTNESS],
-     * read starting at [offset] (so callers can pass a slice of a composition without copying).
-     */
-    fun show(frame: ShortArray, offset: Int = 0) {
+    /** Shows one frame: [GlyphZones.COUNT] stored values in 0..[GlyphZones.MAX_BRIGHTNESS]. */
+    fun show(frame: ShortArray) {
         val gm = manager ?: return
         if (_state.value != State.READY) return
         for (i in 0 until GlyphZones.COUNT) {
-            buffer[i] = frame[offset + i].toInt() * SDK_MAX_BRIGHTNESS / GlyphZones.MAX_BRIGHTNESS
+            buffer[i] = frame[i].toInt() * SDK_MAX_BRIGHTNESS / GlyphZones.MAX_BRIGHTNESS
         }
         try {
             gm.setFrameColors(buffer)

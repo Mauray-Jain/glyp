@@ -36,7 +36,7 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.mauray.glyphstudio.glyph.GlyphZones
-import com.mauray.glyphstudio.model.LightTrack
+import com.mauray.glyphstudio.model.LightFrames
 import com.mauray.glyphstudio.ui.theme.Mono
 import com.mauray.glyphstudio.ui.theme.Muted
 import com.mauray.glyphstudio.ui.theme.NothingRed
@@ -68,7 +68,7 @@ class TimelineState {
  */
 @Composable
 fun Timeline(
-    track: LightTrack,
+    track: LightFrames,
     waveform: FloatArray,
     revision: Int,
     playhead: Int,
@@ -178,7 +178,7 @@ private fun DrawScope.drawLaneLabels(labels: TextMeasurer) {
     }
 }
 
-private fun DrawScope.drawLanes(track: LightTrack, waveform: FloatArray, state: TimelineState) {
+private fun DrawScope.drawLanes(track: LightFrames, waveform: FloatArray, state: TimelineState) {
     val layout = LaneLayout(size.height, 6.dp.toPx())
     val waveHeight = layout.waveHeight
     val rowHeight = layout.rowHeight
