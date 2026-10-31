@@ -1,7 +1,6 @@
 package com.mauray.glyphstudio.export
 
 import java.io.ByteArrayOutputStream
-import java.io.File
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
@@ -12,10 +11,11 @@ import java.nio.ByteOrder
  * page is kept, a new OpusTags packet is laid out over as many pages as it needs, and every
  * audio page is copied with a renumbered sequence and fresh CRC.
  */
-object OggOpusTagger {
+object OggOpus {
 
-    fun retag(input: File, output: File, tags: List<Pair<String, String>>) {
-        val pages = parsePages(input.readBytes())
+    /** [input] is an Ogg Opus file; returns the same stream with [tags] as its comments. */
+    fun retag(input: ByteArray, tags: List<Pair<String, String>>): ByteArray {
+        val pages = parsePages(input)
         require(pages.isNotEmpty() && pages[0].packetStartsWith("OpusHead")) { "Not an Ogg Opus file" }
 
         // The OpusTags packet starts on page 1 and must end its page; audio starts on a fresh page.
@@ -35,8 +35,13 @@ object OggOpusTagger {
         for (i in firstAudioPage until pages.size) {
             writePage(out, pages[i].copy(sequence = sequence++))
         }
-        output.writeBytes(out.toByteArray())
+        return out.toByteArray()
     }
+
+    /** True when [bytes] start with an Ogg page carrying an OpusHead packet. */
+    fun isOggOpus(bytes: ByteArray): Boolean =
+        bytes.size > 36 && String(bytes, 0, 4, Charsets.US_ASCII) == "OggS" &&
+            String(bytes, 28, 8, Charsets.US_ASCII) == "OpusHead"
 
     private fun buildOpusTags(tags: List<Pair<String, String>>): ByteArray {
         val vendor = "Glyph Studio".toByteArray()

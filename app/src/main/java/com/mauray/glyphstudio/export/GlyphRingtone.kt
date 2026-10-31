@@ -9,49 +9,54 @@ import java.util.Base64
 import java.util.zip.Deflater
 
 /**
- * Builds the Vorbis comment tags that Nothing OS reads from a Glyph ringtone (.ogg, Opus).
+ * Turns a light snapshot and Ogg Opus audio into a Glyph ringtone: the same audio with the
+ * light data in the Vorbis comment tags that Nothing OS reads. Pure JVM, no Android.
  *
- * Format as documented by the community tools (SebiAi/custom-nothing-glyph-tools):
+ * Tag format as documented by the community tools (SebiAi/custom-nothing-glyph-tools):
  *  - AUTHOR:   light data, one CSV line per 60 fps frame, each value followed by ',', lines
  *              ending in CRLF; zlib (best compression), base64 without '=' padding, 76-char lines.
  *  - CUSTOM1:  timeline dots for Nothing's Glyph Composer UI ("ms-id," pairs), same encoding.
  *  - COMPOSER: "v1-Asteroids Glyph Composer" for the Phone (3a) / (3a) Pro.
  *  - CUSTOM2:  zone count, "36cols".
  */
-object GlyphMetadata {
+object GlyphRingtone {
 
     const val COMPOSER = "v1-Asteroids Glyph Composer"
     const val COLUMNS = "36cols"
 
-    fun tags(title: String, track: LightFrames, durationMs: Long): List<Pair<String, String>> {
+    /** The tagged ringtone file for [opus] (an Ogg Opus file) and [lights] (a snapshot). */
+    fun build(title: String, lights: LightFrames, durationMs: Long, opus: ByteArray): ByteArray =
+        OggOpus.retag(opus, tags(title, lights, durationMs))
+
+    fun tags(title: String, lights: LightFrames, durationMs: Long): List<Pair<String, String>> {
         // Light data longer than the audio is ignored by the player, so trim it.
-        val frames = minOf(track.frameCount, LightTrack.framesForDuration(durationMs))
+        val frames = minOf(lights.frameCount, LightTrack.framesForDuration(durationMs))
         return listOf(
             "TITLE" to title,
             "ALBUM" to "Glyph Studio",
-            "AUTHOR" to encode(csv(track, frames)),
+            "AUTHOR" to encode(csv(lights, frames)),
             "COMPOSER" to COMPOSER,
-            "CUSTOM1" to encode(timelineDots(track, frames)),
+            "CUSTOM1" to encode(timelineDots(lights, frames)),
             "CUSTOM2" to COLUMNS,
         )
     }
 
-    fun csv(track: LightFrames, frames: Int): ByteArray {
+    fun csv(lights: LightFrames, frames: Int): ByteArray {
         val sb = StringBuilder(frames * GlyphZones.COUNT * 5)
         for (t in 0 until frames) {
-            for (z in 0 until GlyphZones.COUNT) sb.append(track[t, z]).append(',')
+            for (z in 0 until GlyphZones.COUNT) sb.append(lights[t, z]).append(',')
             sb.append("\r\n")
         }
         return sb.toString().toByteArray(Charsets.US_ASCII)
     }
 
     /** One dot per strip each time it switches on, so the Composer app has something to show. */
-    fun timelineDots(track: LightFrames, frames: Int): ByteArray {
+    fun timelineDots(lights: LightFrames, frames: Int): ByteArray {
         val sb = StringBuilder()
         val wasOn = BooleanArray(GlyphZones.Strip.entries.size)
         for (t in 0 until frames) {
             for (strip in GlyphZones.Strip.entries) {
-                val on = strip.zones.any { track[t, it] > 0 }
+                val on = strip.zones.any { lights[t, it] > 0 }
                 if (on && !wasOn[strip.ordinal]) sb.append(frameToMs(t)).append('-').append(strip.customId).append(',')
                 wasOn[strip.ordinal] = on
             }
