@@ -25,6 +25,7 @@ means exactly this.
 | **Performance** | The set of current hits and the levels they produce over time. |
 | **Jam** | Playing the pads while the song is paused: lights only, nothing is written. |
 | **Take** | One recording pass: pad hits written into the light document as the song plays, committed as one undoable transaction when it stops. |
+| **Take recorder** | The module that owns playback on the clock, the pad performance, the current take and the frame shown on the Glyphs. |
 | **Layer / Replace** | How a take combines with existing lights: keep the brighter of the two, or overwrite. |
 | **Clock** | The seam that supplies song position and monotonic time to the take (MediaPlayer on the phone, a fake in tests). |
 | **Session** | The Studio's state machine for one open project: Loading, Idle, Playing, Recording, Exporting or Failed. It decides which actions are allowed. |

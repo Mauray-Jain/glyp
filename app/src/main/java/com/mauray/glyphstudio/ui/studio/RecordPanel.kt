@@ -34,7 +34,6 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
-import com.mauray.glyphstudio.model.LightFrames
 import com.mauray.glyphstudio.studio.Pad
 import com.mauray.glyphstudio.ui.components.PillSlider
 import com.mauray.glyphstudio.ui.components.TogglePill
@@ -49,10 +48,10 @@ import com.mauray.glyphstudio.ui.theme.Surface1
  * every hit is written into the track.
  */
 @Composable
-internal fun RecordLayout(track: LightFrames, vm: StudioActions, s: StudioUiState, modifier: Modifier) {
+internal fun RecordLayout(vm: StudioActions, s: StudioUiState, modifier: Modifier) {
     Column(modifier.fillMaxWidth().padding(horizontal = 20.dp)) {
         GlyphPreview(
-            levels = previewLevels(track, s),
+            levels = s.lights::get,
             selected = emptySet(),
             onZoneTap = {},
             // Same size and position as in Compose/Edit; spare height goes below instead.

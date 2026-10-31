@@ -1,12 +1,12 @@
 package com.mauray.glyphstudio.ui.studio
 
 import android.app.Application
-import android.media.MediaPlayer
 import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.mauray.glyphstudio.GlyphStudioApp
 import com.mauray.glyphstudio.audio.AudioDecoder
+import com.mauray.glyphstudio.audio.MediaPlayerClock
 import com.mauray.glyphstudio.composer.Analysis
 import com.mauray.glyphstudio.composer.AudioAnalyzer
 import com.mauray.glyphstudio.composer.AutoComposer
@@ -14,14 +14,11 @@ import com.mauray.glyphstudio.composer.ComposerParams
 import com.mauray.glyphstudio.glyph.GlyphZones
 import com.mauray.glyphstudio.model.LightDocument
 import com.mauray.glyphstudio.model.ProjectMeta
-import com.mauray.glyphstudio.model.frameToMs
-import com.mauray.glyphstudio.model.msToFrame
 import com.mauray.glyphstudio.studio.EditOps
 import com.mauray.glyphstudio.studio.EditTool
 import com.mauray.glyphstudio.studio.Pad
-import com.mauray.glyphstudio.studio.PadPerformance
+import com.mauray.glyphstudio.studio.TakeRecorder
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -29,7 +26,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
@@ -60,8 +56,8 @@ data class StudioUiState(
     val overdub: Boolean = true,
     val padBrightness: Float = 1f,
     val heldPads: Set<Pad> = emptySet(),
-    /** Live pad levels shown on the preview while jamming (not recording); null when idle. */
-    val liveFrame: IntArray? = null,
+    /** Stored values the phone shows right now: the track at the playhead with pads on top. */
+    val lights: IntArray = IntArray(GlyphZones.COUNT),
     val exportProgress: Float? = null,
     val exportedUri: Uri? = null,
     val message: String? = null,
@@ -89,19 +85,8 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions {
     var waveform: FloatArray = FloatArray(0)
         private set
 
-    private var player: MediaPlayer? = null
-    private var playbackJob: Job? = null
-    private val frameBuffer = ShortArray(GlyphZones.COUNT)
-
-    private val performance = PadPerformance()
-    private val padLevels = FloatArray(GlyphZones.COUNT)
-    private val live = ShortArray(GlyphZones.COUNT)
-    private var jamJob: Job? = null
-    private var jamStartNanos = 0L
-    /** The recording in progress, one undo step; null when not recording. */
-    private var take: LightDocument.Transaction? = null
-    /** Last frame written by the current take. */
-    private var lastRecorded = -1
+    /** Playback, pads and takes; null until loaded. */
+    private var recorder: TakeRecorder? = null
 
     fun load(id: String) {
         if (document != null) return
@@ -130,17 +115,26 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions {
                 document = doc
                 // Debounced autosave: half a second after the last change, from a snapshot.
                 viewModelScope.launch { doc.revision.drop(1).collectLatest { delay(500); save() } }
-                player = MediaPlayer().apply {
-                    setDataSource(p.audioFile.absolutePath)
-                    prepare()
-                    // Reaching the end of the song also ends a take, keeping what was recorded.
-                    setOnCompletionListener { if (_state.value.recording) finishRecording() else pause() }
+                val clock = withContext(Dispatchers.IO) { MediaPlayerClock(p.audioFile) }
+                val rec = TakeRecorder(doc, clock, viewModelScope, glyphApp.glyph::show)
+                recorder = rec
+                viewModelScope.launch {
+                    rec.live.collect { live ->
+                        _state.update {
+                            it.copy(
+                                playhead = live.playhead,
+                                playing = live.playing,
+                                recording = live.recording,
+                                heldPads = live.heldPads,
+                                lights = live.lights,
+                            )
+                        }
+                    }
                 }
                 // Every change to the lights redraws the timeline and the Glyphs.
                 viewModelScope.launch {
                     doc.revision.collect { rev ->
                         _state.update { it.copy(revision = rev, canUndo = doc.canUndo, canRedo = doc.canRedo) }
-                        if (take == null) showFrame(_state.value.playhead)
                     }
                 }
                 _state.update { it.copy(loading = null) }
@@ -155,66 +149,16 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions {
     override fun togglePlay() = when {
         _state.value.recording -> toggleRecord()
         _state.value.playing -> pause()
-        else -> play()
+        else -> recorder?.play() ?: Unit
     }
 
-    fun play() {
-        val mp = player ?: return
-        val s = _state.value
-        val start = if (s.playhead >= s.frameCount - 1) 0 else s.playhead
-        mp.seekTo(frameToMs(start), MediaPlayer.SEEK_CLOSEST)
-        mp.start()
-        // Pad hits are timed on the song clock from here on; drop any wall-clock jam.
-        stopJam()
-        _state.update { it.copy(playing = true) }
-        playbackJob?.cancel()
-        playbackJob = viewModelScope.launch {
-            var ticks = 0
-            while (isActive && mp.isPlaying) {
-                val frame = msToFrame(mp.currentPosition.toLong()).coerceIn(0, max(0, s.frameCount - 1))
-                if (frame != _state.value.playhead) {
-                    _state.update { it.copy(playhead = frame) }
-                    when {
-                        _state.value.recording -> {
-                            recordUpTo(frame)
-                            // Let the timeline catch up ~10x a second while recording.
-                            if (++ticks % 6 == 0) take?.publish()
-                            showFrame(frame)
-                        }
-                        !performance.isIdle(frame) -> showLive(frame, frame)
-                        else -> {
-                            if (_state.value.liveFrame != null) _state.update { it.copy(liveFrame = null) }
-                            showFrame(frame)
-                        }
-                    }
-                }
-                delay(8)
-            }
-            if (_state.value.recording) finishRecording() else _state.update { it.copy(playing = false) }
-        }
-    }
-
+    /** Pauses playback, keeping any take. */
     fun pause() {
-        player?.takeIf { it.isPlaying }?.pause()
-        playbackJob?.cancel()
-        performance.clear()
-        _state.update { it.copy(playing = false, heldPads = emptySet(), liveFrame = null) }
+        recorder?.pause()
     }
 
     override fun seek(frame: Int) {
-        if (_state.value.recording) return
-        val f = frame.coerceIn(0, max(0, _state.value.frameCount - 1))
-        _state.update { it.copy(playhead = f) }
-        player?.let { if (it.isPlaying) it.seekTo(frameToMs(f), MediaPlayer.SEEK_CLOSEST) }
-        showFrame(f)
-    }
-
-    /** Pushes the given frame to the real Glyph lights. */
-    fun showFrame(frame: Int) {
-        val doc = document ?: return
-        if (frame !in 0 until doc.frameCount) return
-        doc.copyFrame(frame, frameBuffer)
-        glyphApp.glyph.show(frameBuffer)
+        recorder?.seek(frame)
     }
 
     // endregion
@@ -305,97 +249,22 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions {
     override fun setPadBrightness(v: Float) = _state.update { it.copy(padBrightness = v) }
 
     override fun pressPad(pad: Pad) {
-        if (document == null) return
-        if (!_state.value.playing && performance.isIdle(jamFrame())) jamStartNanos = System.nanoTime()
-        performance.press(pad, clockFrame())
-        _state.update { it.copy(heldPads = performance.heldPads) }
-        if (!_state.value.playing) startJam()
+        recorder?.pressPad(pad, _state.value.padBrightness)
     }
 
     override fun releasePad(pad: Pad) {
-        performance.release(pad, clockFrame())
-        _state.update { it.copy(heldPads = performance.heldPads) }
+        recorder?.releasePad(pad)
     }
 
     /** Starts recording from the playhead (song playing), or stops and keeps the take. */
     override fun toggleRecord() {
+        val rec = recorder ?: return
         if (_state.value.recording) {
-            finishRecording()
-            return
+            rec.stop()
+        } else {
+            _state.update { it.copy(selection = null) }
+            rec.record(_state.value.overdub)
         }
-        val doc = document ?: return
-        take = doc.begin()
-        val s = _state.value
-        val start = if (s.playhead >= s.frameCount - 1) 0 else s.playhead
-        seek(start)
-        performance.clear()
-        lastRecorded = start - 1
-        _state.update { it.copy(recording = true, selection = null) }
-        play()
-    }
-
-    private fun finishRecording() {
-        recordUpTo(_state.value.playhead)
-        take?.commit()
-        take = null
-        _state.update { it.copy(recording = false) }
-        pause()
-    }
-
-    /** Writes pad levels for every frame since the last write, on the song clock. */
-    private fun recordUpTo(frame: Int) {
-        val tx = take ?: return
-        val s = _state.value
-        val peak = s.padBrightness * GlyphZones.MAX_BRIGHTNESS
-        tx.update { track ->
-            for (f in (lastRecorded + 1)..minOf(frame, track.frameCount - 1)) {
-                performance.levelsAt(f, padLevels)
-                for (z in 0 until GlyphZones.COUNT) {
-                    val v = (padLevels[z] * peak).toInt()
-                    track[f, z] = if (s.overdub) max(track[f, z], v) else v
-                }
-            }
-        }
-        lastRecorded = max(lastRecorded, frame)
-    }
-
-    private fun clockFrame(): Int {
-        val mp = player
-        return if (_state.value.playing && mp != null) msToFrame(mp.currentPosition.toLong()) else jamFrame()
-    }
-
-    private fun jamFrame() = ((System.nanoTime() - jamStartNanos) * GlyphZones.FPS / 1_000_000_000L).toInt()
-
-    /** While paused, animates held pads and fades on the lights until everything is idle. */
-    private fun startJam() {
-        if (jamJob?.isActive == true) return
-        jamJob = viewModelScope.launch {
-            while (isActive && !performance.isIdle(jamFrame())) {
-                showLive(jamFrame(), _state.value.playhead)
-                delay(16)
-            }
-            _state.update { it.copy(liveFrame = null, heldPads = performance.heldPads) }
-            showFrame(_state.value.playhead)
-        }
-    }
-
-    private fun stopJam() {
-        jamJob?.cancel()
-        performance.clear()
-        _state.update { it.copy(liveFrame = null, heldPads = emptySet()) }
-    }
-
-    /** Shows the track at [trackFrame] with pad levels at [padFrame] on top, without saving. */
-    private fun showLive(padFrame: Int, trackFrame: Int) {
-        val track = document ?: return
-        val peak = _state.value.padBrightness * GlyphZones.MAX_BRIGHTNESS
-        performance.levelsAt(padFrame, padLevels)
-        val frame = IntArray(GlyphZones.COUNT) { z ->
-            max(track[trackFrame.coerceIn(0, track.frameCount - 1), z], (padLevels[z] * peak).toInt())
-        }
-        for (z in frame.indices) live[z] = frame[z].toShort()
-        glyphApp.glyph.show(live)
-        _state.update { it.copy(liveFrame = frame) }
     }
 
     // endregion
@@ -437,13 +306,9 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions {
     fun consumeMessage() = _state.update { it.copy(message = null) }
 
     override fun onCleared() {
-        playbackJob?.cancel()
-        jamJob?.cancel()
-        player?.release()
-        glyphApp.glyph.off()
         // Leaving mid-take keeps what was recorded.
-        take?.commit()
-        take = null
+        recorder?.close()
+        glyphApp.glyph.off()
         // viewModelScope is gone; a short blocking save keeps the last edit.
         runBlocking { save() }
     }

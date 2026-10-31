@@ -57,7 +57,29 @@ class PadPerformanceTest {
         p.press(Pad.TOP, 0)
         p.press(Pad.BOTTOM, 1)
         assertEquals(setOf(Pad.TOP, Pad.BOTTOM), p.heldPads)
-        p.releaseAll(5)
+        p.release(Pad.TOP, 5)
+        p.release(Pad.BOTTOM, 5)
         assertTrue(p.heldPads.isEmpty())
+    }
+
+    @Test
+    fun `hits keep the brightness they were played at`() {
+        val p = PadPerformance()
+        p.press(Pad.RIGHT, 0, level = 0.25f)
+        p.levelsAt(1, out)
+        assertEquals(0.25f, out[GlyphZones.Strip.A.zones.first], 1e-6f)
+    }
+
+    @Test
+    fun `asking whether idle does not forget hits`() {
+        val p = PadPerformance(fadeFrames = 2)
+        p.press(Pad.TOP, 0)
+        p.release(Pad.TOP, 1)
+        assertTrue(p.isIdle(10))
+        p.levelsAt(2, out)
+        assertTrue("fade still readable after isIdle", out[0] > 0f)
+        p.forgetEndedBefore(10)
+        p.levelsAt(2, out)
+        assertEquals(0f, out[0])
     }
 }

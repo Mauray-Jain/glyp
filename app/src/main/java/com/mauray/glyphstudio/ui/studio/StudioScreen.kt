@@ -45,9 +45,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.ViewModelStore
 import androidx.lifecycle.ViewModelStoreOwner
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.mauray.glyphstudio.composer.ComposerStyle
@@ -100,6 +102,8 @@ private fun StudioScreen(projectId: String, onBack: () -> Unit, vm: StudioViewMo
     var showExport by remember { mutableStateOf(false) }
 
     BackHandler { vm.pause(); onBack() }
+    // Nothing plays in the background; pausing also commits a running take.
+    LifecycleEventEffect(Lifecycle.Event.ON_STOP) { vm.pause() }
     LaunchedEffect(s.message) {
         s.message?.let { snackbar.showSnackbar(it); vm.consumeMessage() }
     }
@@ -182,7 +186,7 @@ internal fun StudioLayout(
                 StudioHeader(s, glyphState)
                 when (mode) {
                     // Record is one fixed screen: lights and pads visible together, no scrolling.
-                    StudioMode.RECORD -> RecordLayout(track, actions, s, Modifier.weight(1f))
+                    StudioMode.RECORD -> RecordLayout(actions, s, Modifier.weight(1f))
                     else -> StudioScroll(track, waveform, actions, s, mode)
                 }
             }
@@ -219,12 +223,6 @@ private fun StudioHeader(s: StudioUiState, glyphState: GlyphController.State) {
     }
 }
 
-/** Levels to show on the phone: live pad hits while jamming, otherwise the track at the playhead. */
-internal fun previewLevels(track: LightFrames, s: StudioUiState): (Int) -> Int {
-    val frame = s.playhead.coerceIn(0, track.frameCount - 1)
-    val live = s.liveFrame
-    return { zone -> live?.get(zone) ?: track[frame, zone] }
-}
 
 /** Compose and Edit: preview, timeline and the mode's controls in one scrolling column. */
 @Composable
@@ -240,7 +238,7 @@ private fun StudioScroll(
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp)) {
         GlyphPreview(
-            levels = previewLevels(track, s),
+            levels = s.lights::get,
             // Zone picking only means something in Edit.
             selected = if (editing) s.selectedZones else emptySet(),
             onZoneTap = { if (editing) vm.toggleZone(it) },

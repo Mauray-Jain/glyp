@@ -100,7 +100,7 @@ class ScreenshotTest {
             recording = recording,
             playing = recording,
             heldPads = held,
-            liveFrame = if (held.isEmpty()) null else IntArray(GlyphZones.COUNT) { z ->
+            lights = IntArray(GlyphZones.COUNT) { z ->
                 if (held.any { z in it.zones }) GlyphZones.MAX_BRIGHTNESS else track[214, z]
             },
             selection = if (recording) null else 150..270,
