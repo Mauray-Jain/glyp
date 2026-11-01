@@ -7,12 +7,12 @@ plugins {
 }
 
 android {
-    namespace = "com.mauray.glyphstudio"
+    namespace = "com.mauray.glyp"
     compileSdk = 37
     buildToolsVersion = "37.0.0"
 
     defaultConfig {
-        applicationId = "com.mauray.glyphstudio"
+        applicationId = "com.mauray.glyp"
         // The Glyph SDK only runs on Nothing OS with Android 14+.
         minSdk = 34
         targetSdk = 36
