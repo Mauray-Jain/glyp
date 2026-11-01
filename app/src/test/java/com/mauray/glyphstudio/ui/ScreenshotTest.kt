@@ -30,7 +30,7 @@ import com.mauray.glyphstudio.ui.studio.StudioControls
 import com.mauray.glyphstudio.ui.studio.StudioLayout
 import com.mauray.glyphstudio.ui.studio.StudioMode
 import com.mauray.glyphstudio.ui.studio.StudioState
-import com.mauray.glyphstudio.ui.theme.GlyphStudioTheme
+import com.mauray.glyphstudio.ui.theme.GlypTheme
 import kotlin.math.PI
 import kotlin.math.exp
 import kotlin.math.sin
@@ -122,7 +122,7 @@ class ScreenshotTest {
         }
     }
 
-    private fun snap(content: @Composable () -> Unit) = paparazzi.snapshot { GlyphStudioTheme(content) }
+    private fun snap(content: @Composable () -> Unit) = paparazzi.snapshot { GlypTheme(content) }
 
     /** 12 s at 44.1 kHz: kick every 0.5 s, hats every 0.25 s, a little melody. */
     private fun demoTrack(): Pair<LightTrack, FloatArray> {

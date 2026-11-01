@@ -205,7 +205,7 @@ class StudioSessionTest {
         assertEquals("Ring", r.open.name)
         assertEquals("Ring", store.load(r.id).meta.name)
         assertEquals(GlyphZones.MAX_BRIGHTNESS, r.exports.single().lights[5, rightZone])
-        assertEquals("Saved to Ringtones/Glyph Studio", r.messages.last())
+        assertEquals("Saved to Ringtones/Glyp", r.messages.last())
     }
 
     @Test

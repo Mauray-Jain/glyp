@@ -1,4 +1,4 @@
-# Glyph Studio
+# Glyp
 
 Light compositions and Glyph ringtones for the Nothing Phone (3a) / (3a) Pro.
 
@@ -9,7 +9,7 @@ Light compositions and Glyph ringtones for the Nothing Phone (3a) / (3a) Pro.
 - **Record**: five pads in the Glyph Composer layout; jam on the lights, or record hits over
   the song (layer or replace).
 - **Export**: writes an Ogg Opus ringtone with the light data in its tags (Nothing's ringtone
-  format) to `Ringtones/Glyph Studio`, and can set it as the default ringtone.
+  format) to `Ringtones/Glyp`, and can set it as the default ringtone.
 
 ## Build
 

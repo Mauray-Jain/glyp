@@ -17,7 +17,7 @@ split between the exporter, the ViewModel and the dialog.
   JVM: retagging round-trips with valid CRCs and renumbered pages, a tag packet over 64 KB spans
   pages correctly, and the CSV matches a golden string.
 - **`export/RingtoneInstaller`** is the only Android adapter: it publishes the file to
-  `Ringtones/Glyph Studio` through MediaStore and owns the WRITE_SETTINGS flow (set now, or send
+  `Ringtones/Glyp` through MediaStore and owns the WRITE_SETTINGS flow (set now, or send
   the user to the permission screen and say so).
 - **`RingtoneExporter`** just sequences: snapshot on the caller's thread, get Opus audio (copy or
   transcode the song's PCM), build, install.

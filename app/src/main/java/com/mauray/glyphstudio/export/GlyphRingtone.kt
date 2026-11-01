@@ -32,7 +32,7 @@ object GlyphRingtone {
         val frames = minOf(lights.frameCount, Timebase.framesFor(durationMs))
         return listOf(
             "TITLE" to title,
-            "ALBUM" to "Glyph Studio",
+            "ALBUM" to "Glyp",
             "AUTHOR" to encode(csv(lights, frames)),
             "COMPOSER" to COMPOSER,
             "CUSTOM1" to encode(timelineDots(lights, frames)),

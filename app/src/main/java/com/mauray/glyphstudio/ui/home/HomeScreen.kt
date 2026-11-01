@@ -131,7 +131,7 @@ internal fun HomeLayout(
         ) {
             item {
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 28.dp)) {
-                    Text("Glyph Studio", style = MaterialTheme.typography.displaySmall, modifier = Modifier.weight(1f))
+                    Text("Glyp", style = MaterialTheme.typography.displaySmall, modifier = Modifier.weight(1f))
                     CircleButton(Icons.Filled.Add, "New from song", onNew)
                 }
                 if (busy) {

@@ -8,7 +8,7 @@ import com.mauray.glyphstudio.model.ProjectStore
 import java.io.File
 
 /** Holds the app-wide singletons; small enough that a DI framework would be overkill. */
-class GlyphStudioApp : Application() {
+class GlypApp : Application() {
     val glyph by lazy { GlyphController(this) }
     val store by lazy { ProjectStore(File(filesDir, "projects")) }
     val exporter by lazy { RingtoneExporter(File(cacheDir, "export"), RingtoneInstaller(this)) }

@@ -19,7 +19,7 @@ interface Ringtone {
 }
 
 /**
- * The Android side of a ringtone: publishes the file to Ringtones/Glyph Studio through
+ * The Android side of a ringtone: publishes the file to Ringtones/Glyp through
  * MediaStore (so it shows up in the system picker) and owns the WRITE_SETTINGS flow for
  * making it the default.
  */
@@ -34,7 +34,7 @@ class RingtoneInstaller(context: Context) {
             put(MediaStore.Audio.Media.DISPLAY_NAME, "$safeName.ogg")
             put(MediaStore.Audio.Media.TITLE, title)
             put(MediaStore.Audio.Media.MIME_TYPE, "audio/ogg")
-            put(MediaStore.Audio.Media.RELATIVE_PATH, "${Environment.DIRECTORY_RINGTONES}/Glyph Studio")
+            put(MediaStore.Audio.Media.RELATIVE_PATH, "${Environment.DIRECTORY_RINGTONES}/Glyp")
             put(MediaStore.Audio.Media.IS_RINGTONE, 1)
             put(MediaStore.Audio.Media.IS_NOTIFICATION, 1)
             put(MediaStore.Audio.Media.IS_ALARM, 1)

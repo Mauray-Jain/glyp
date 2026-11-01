@@ -61,8 +61,8 @@ class OggOpusTest {
 
     @Test
     fun `a tag packet of an exact multiple of 255 bytes ends with a zero lace`() {
-        // 8 + 4 + 12 ("Glyph Studio") + 4 + 4 + len("X=" + value) = 255 * 300
-        val value = "v".repeat(255 * 300 - 34)
+        // 8 + 4 + 4 ("Glyp") + 4 + 4 + len("X=" + value) = 255 * 300
+        val value = "v".repeat(255 * 300 - 26)
         val (pages, _) = retag(listOf("X" to value))
         val packets = OggTestFiles.packets(pages)
         assertEquals(255 * 300, packets[1].size)

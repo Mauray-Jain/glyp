@@ -6,7 +6,7 @@ import android.net.Uri
 import android.provider.OpenableColumns
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.mauray.glyphstudio.GlyphStudioApp
+import com.mauray.glyphstudio.GlypApp
 import com.mauray.glyphstudio.model.ProjectMeta
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -17,7 +17,7 @@ import kotlinx.coroutines.withContext
 
 class HomeViewModel(app: Application) : AndroidViewModel(app) {
 
-    private val store = (app as GlyphStudioApp).store
+    private val store = (app as GlypApp).store
 
     private val _projects = MutableStateFlow<List<ProjectMeta>>(emptyList())
     val projects: StateFlow<List<ProjectMeta>> = _projects.asStateFlow()

@@ -100,6 +100,6 @@ fun dotClock(text: String): AnnotatedString = buildAnnotatedString {
 }
 
 @Composable
-fun GlyphStudioTheme(content: @Composable () -> Unit) {
+fun GlypTheme(content: @Composable () -> Unit) {
     MaterialTheme(colorScheme = colors, typography = typography, content = content)
 }

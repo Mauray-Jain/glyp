@@ -259,7 +259,7 @@ class StudioSession(
         return try {
             save(o)
             val ringtone = exportRingtone(job) { progress -> setExporting(o, Phase.Exporting(progress)) }
-            notify("Saved to Ringtones/Glyph Studio")
+            notify("Saved to Ringtones/Glyp")
             Result.success(ringtone)
         } catch (e: CancellationException) {
             throw e

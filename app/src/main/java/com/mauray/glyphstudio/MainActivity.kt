@@ -10,17 +10,17 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
 import com.mauray.glyphstudio.ui.home.HomeScreen
 import com.mauray.glyphstudio.ui.studio.StudioScreen
-import com.mauray.glyphstudio.ui.theme.GlyphStudioTheme
+import com.mauray.glyphstudio.ui.theme.GlypTheme
 
 class MainActivity : ComponentActivity() {
 
-    private val glyph get() = (application as GlyphStudioApp).glyph
+    private val glyph get() = (application as GlypApp).glyph
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            GlyphStudioTheme {
+            GlypTheme {
                 var openProject by rememberSaveable { mutableStateOf<String?>(null) }
                 val id = openProject
                 if (id == null) {

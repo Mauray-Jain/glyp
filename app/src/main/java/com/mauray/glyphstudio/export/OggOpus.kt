@@ -44,7 +44,7 @@ object OggOpus {
             String(bytes, 28, 8, Charsets.US_ASCII) == "OpusHead"
 
     private fun buildOpusTags(tags: List<Pair<String, String>>): ByteArray {
-        val vendor = "Glyph Studio".toByteArray()
+        val vendor = "Glyp".toByteArray()
         val comments = tags.map { (k, v) -> "$k=$v".toByteArray(Charsets.UTF_8) }
         val size = 8 + 4 + vendor.size + 4 + comments.sumOf { 4 + it.size }
         val buf = ByteBuffer.allocate(size).order(ByteOrder.LITTLE_ENDIAN)

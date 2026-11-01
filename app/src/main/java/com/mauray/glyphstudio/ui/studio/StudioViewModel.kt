@@ -3,7 +3,7 @@ package com.mauray.glyphstudio.ui.studio
 import android.app.Application
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.mauray.glyphstudio.GlyphStudioApp
+import com.mauray.glyphstudio.GlypApp
 import com.mauray.glyphstudio.audio.MediaPlayerClock
 import com.mauray.glyphstudio.audio.Song
 import kotlinx.coroutines.Dispatchers
@@ -15,7 +15,7 @@ import kotlinx.coroutines.withContext
  */
 class StudioViewModel(app: Application, projectId: String) : ViewModel() {
 
-    private val glyphApp = app as GlyphStudioApp
+    private val glyphApp = app as GlypApp
     val glyphState = glyphApp.glyph.state
     val controls = StudioControls()
 
