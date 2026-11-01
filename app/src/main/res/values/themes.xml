@@ -1,5 +1,5 @@
 <resources>
-    <style name="Theme.GlyphStudio" parent="android:Theme.Material.NoActionBar">
+    <style name="Theme.Glyp" parent="android:Theme.Material.NoActionBar">
         <item name="android:windowBackground">#000000</item>
         <item name="android:statusBarColor">#000000</item>
         <item name="android:navigationBarColor">#000000</item>

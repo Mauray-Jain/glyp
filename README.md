@@ -1,4 +1,4 @@
-# Glyph Studio
+# Glyp
 
 Light compositions and Glyph ringtones for the Nothing Phone (3a) / (3a) Pro.
 
@@ -9,7 +9,7 @@ Light compositions and Glyph ringtones for the Nothing Phone (3a) / (3a) Pro.
 - **Record**: five pads in the Glyph Composer layout; jam on the lights, or record hits over
   the song (layer or replace).
 - **Export**: writes an Ogg Opus ringtone with the light data in its tags (Nothing's ringtone
-  format) to `Ringtones/Glyph Studio`, and can set it as the default ringtone.
+  format) to `Ringtones/Glyp`, and can set it as the default ringtone.
 
 ## Build
 
@@ -44,11 +44,16 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 
 | Package | What |
 |---|---|
-| `glyph` | Zone map (C 0–19, A 20–30, B 31–35) and the Glyph SDK wrapper |
+| `glyph` | Zone map (C 0–19, A 20–30, B 31–35) and the Glyph SDK adapter |
+| `model` | Light track, the light document (transactions, undo, revision) and the project store |
+| `audio` | Song (decoded once: PCM, analysis, waveform), the frame ↔ time base, decoder, MediaPlayer clock |
 | `composer` | FFT, audio analysis, automatic composition styles |
-| `studio` | Hand-editing tools and the Record-mode pad engine |
-| `export` | Ringtone tags, Opus encoding, Ogg re-tagging, MediaStore publish |
-| `ui` | Compose screens and the Nothing-style components |
+| `studio` | Edit tools, pads, light shapes, and the take recorder (playback, jamming, recording) |
+| `export` | Pure ringtone builder (tags + Ogg re-paging) and the MediaStore / ringtone installer |
+| `ui` | Compose screens, the Studio session state machine and the Nothing-style components |
+
+Words used in the code are defined in [GLOSSARY.md](GLOSSARY.md); design decisions are in
+[docs/adr](docs/adr/README.md).
 
 ## Fonts
 
