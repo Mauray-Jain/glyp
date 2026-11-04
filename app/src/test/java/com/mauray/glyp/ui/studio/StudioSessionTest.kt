@@ -55,7 +55,8 @@ class StudioSessionTest {
             openClock = { FakeClock(backgroundScope, testScheduler, durationMs = 10_000) },
             exportRingtone = { job, onProgress ->
                 exports += job
-                onProgress(0.5f)
+                // Like the real exporter, which reports progress from Dispatchers.IO.
+                onAnotherThread { onProgress(0.5f) }
                 delay(100)
                 if (exportFails) error("disk full")
                 object : Ringtone {
@@ -72,6 +73,13 @@ class StudioSessionTest {
     }
 
     private val Rig.open get() = session.state.value as StudioState.Open
+
+    /** Runs [block] on a fresh thread and waits for it, rethrowing what it threw. */
+    private fun onAnotherThread(block: () -> Unit) {
+        var thrown: Throwable? = null
+        Thread { try { block() } catch (t: Throwable) { thrown = t } }.apply { start(); join() }
+        thrown?.let { throw it }
+    }
 
     private fun TestScope.advance(ms: Long) {
         testScheduler.advanceTimeBy(ms)
@@ -213,8 +221,8 @@ class StudioSessionTest {
         val r = rig(exportFails = true)
         val export = async { r.session.export("Ring") }
         advance(200)
-        assertTrue(export.await().isFailure)
+        assertEquals("disk full", export.await().exceptionOrNull()?.message)
         assertEquals(Phase.Idle, r.open.phase)
-        assertEquals("Export failed: disk full", r.messages.last())
+        assertTrue("the dialog shows the reason, not a snackbar", r.messages.none { "disk full" in it })
     }
 }

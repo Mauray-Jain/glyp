@@ -101,7 +101,7 @@ fun StudioScreen(projectId: String, onBack: () -> Unit) {
         actions = session,
         snackbar = snackbar,
         onBack = { session.pause(); onBack() },
-        onExport = { export = ExportStage.Form },
+        onExport = { export = ExportStage.Form() },
     )
 
     val open = s as? StudioState.Open
@@ -113,7 +113,10 @@ fun StudioScreen(projectId: String, onBack: () -> Unit) {
             onExport = { title ->
                 export = ExportStage.Encoding
                 scope.launch {
-                    export = session.export(title).fold({ ExportStage.Saved(it) }, { ExportStage.Form })
+                    export = session.export(title).fold(
+                        { ExportStage.Saved(it) },
+                        { ExportStage.Form(error = it.message ?: "Something went wrong") },
+                    )
                 }
             },
             onSetRingtone = { ringtone ->
@@ -354,7 +357,8 @@ private fun TransportBar(s: StudioState.Open, actions: StudioActions) {
 /** Where the export dialog is; encoding progress itself comes from [Phase.Exporting]. */
 private sealed interface ExportStage {
     data object Closed : ExportStage
-    data object Form : ExportStage
+    /** Naming the ringtone; [error] says why the last attempt failed, if it did. */
+    data class Form(val error: String? = null) : ExportStage
     data object Encoding : ExportStage
     data class Saved(val ringtone: Ringtone) : ExportStage
 }
@@ -395,14 +399,23 @@ private fun ExportDialog(
                             drawStopIndicator = {},
                         )
                     }
-                    else -> OutlinedTextField(
-                        value = title,
-                        onValueChange = { title = it },
-                        label = { Text("Name") },
-                        singleLine = true,
-                        shape = RoundedCornerShape(16.dp),
-                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Color.White, focusedLabelColor = Color.White, cursorColor = Color.White),
-                    )
+                    is ExportStage.Form -> {
+                        OutlinedTextField(
+                            value = title,
+                            onValueChange = { title = it },
+                            label = { Text("Name") },
+                            singleLine = true,
+                            shape = RoundedCornerShape(16.dp),
+                            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Color.White, focusedLabelColor = Color.White, cursorColor = Color.White),
+                        )
+                        stage.error?.let { error ->
+                            Spacer(Modifier.height(12.dp))
+                            Text("COULDN'T EXPORT", style = MaterialTheme.typography.labelSmall, color = NothingRed)
+                            Spacer(Modifier.height(4.dp))
+                            Text(error, style = MaterialTheme.typography.bodySmall, color = Muted)
+                        }
+                    }
+                    ExportStage.Closed -> Unit
                 }
             }
         },
@@ -410,7 +423,11 @@ private fun ExportDialog(
             when (stage) {
                 is ExportStage.Saved -> PillButton("Set as ringtone", { onSetRingtone(stage.ringtone) }, height = 48.dp)
                 ExportStage.Encoding -> Unit
-                else -> PillButton("Export", { onExport(title.trim().ifEmpty { name }) }, height = 48.dp)
+                else -> PillButton(
+                    if (stage is ExportStage.Form && stage.error != null) "Try again" else "Export",
+                    { onExport(title.trim().ifEmpty { name }) },
+                    height = 48.dp,
+                )
             }
         },
         dismissButton = {

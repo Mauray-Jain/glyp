@@ -248,7 +248,8 @@ class StudioSession(
 
     /**
      * Saves the project as a ringtone named [title] (also renaming the project). Allowed from
-     * Idle or Playing; playback stops first. Fails with a message on any error.
+     * Idle or Playing; playback stops first. On any error the failure carries the reason,
+     * for the caller to show.
      */
     suspend fun export(title: String): Result<Ringtone> {
         val o = editable() ?: return Result.failure(IllegalStateException("Busy"))
@@ -256,17 +257,20 @@ class StudioSession(
         o.meta = o.meta.copy(name = title)
         val job = ExportJob(title, o.audioFile, o.song.pcm, o.document.snapshot(), o.meta.durationMs)
         setExporting(o, Phase.Exporting(0f))
+        // The exporter reports progress from its own thread; publish it from ours.
+        val progress = MutableStateFlow(0f)
+        val relay = scope.launch { progress.collect { setExporting(o, Phase.Exporting(it)) } }
         return try {
             save(o)
-            val ringtone = exportRingtone(job) { progress -> setExporting(o, Phase.Exporting(progress)) }
+            val ringtone = exportRingtone(job) { progress.value = it }
             notify("Saved to Ringtones/Glyp")
             Result.success(ringtone)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            notify("Export failed: ${e.message}")
             Result.failure(e)
         } finally {
+            relay.cancel()
             setExporting(o, null)
         }
     }
