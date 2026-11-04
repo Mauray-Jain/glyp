@@ -108,6 +108,8 @@ fun Timeline(
                     val anchor = state.frameAt(startX)
                     var dragging = false
                     var zooming = false
+                    // A mostly vertical move is the page scrolling: neither a tap nor a selection.
+                    var scrolling = false
                     do {
                         val event = awaitPointerEvent()
                         val pressed = event.changes.filter { it.pressed }
@@ -121,9 +123,14 @@ fun Timeline(
                             state.scroll = focus - centroid.x / state.zoom
                             state.clamp(track.frameCount)
                             event.changes.forEach { it.consume() }
-                        } else if (!zooming && pressed.size == 1) {
+                        } else if (!zooming && !scrolling && pressed.size == 1) {
                             val change = pressed[0]
-                            if (!dragging && abs(change.position.x - startX) > viewConfiguration.touchSlop) dragging = true
+                            if (!dragging) {
+                                val dx = abs(change.position.x - startX)
+                                val dy = abs(change.position.y - down.position.y)
+                                val slop = viewConfiguration.touchSlop
+                                if (dy > slop && dy > dx) scrolling = true else if (dx > slop) dragging = true
+                            }
                             if (dragging) {
                                 val current = state.frameAt(change.position.x).coerceIn(0, track.frameCount - 1)
                                 onSelect(min(anchor, current)..max(anchor, current))
@@ -131,7 +138,7 @@ fun Timeline(
                             }
                         }
                     } while (event.changes.any { it.pressed })
-                    if (!dragging && !zooming) {
+                    if (!dragging && !zooming && !scrolling) {
                         onSeek(state.frameAt(startX))
                         onSelect(null)
                     }

@@ -112,7 +112,7 @@ private fun describeZones(zones: Set<Int>): String? {
     if (zones.size == GlyphZones.COUNT) return "All lights"
     val strips = GlyphZones.stripOrder.filter { strip -> strip.zones.all { it in zones } }
     val wholeStrips = strips.sumOf { it.zones.count() } == zones.size
-    return if (wholeStrips) strips.joinToString(" + ") { it.displayName } else "${zones.size} lights"
+    return if (wholeStrips) strips.joinToString(" + ") { it.displayName } else if (zones.size == 1) "1 light" else "${zones.size} lights"
 }
 
 /** A tiny brightness-over-time sketch of what each tool does. */
