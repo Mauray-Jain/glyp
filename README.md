@@ -9,7 +9,8 @@ Light compositions and Glyph ringtones for the Nothing Phone (3a) / (3a) Pro.
   snackbar.
 - **Auto compose**: pick a song up to 10 minutes long; it is analysed (FFT bands + onset
   detection) and the lights are generated in one of four styles: Pulse, Spectrum, Flow, Classic.
-  Or start blank.
+  Or start blank. Picking a Glyph ringtone (one exported from Glyp, or made in Nothing's Glyph
+  Composer for the Phone (3a)) keeps its lights instead, ready to edit.
 - **Edit**: timeline of all 36 zones with a waveform, live preview on screen and on the real
   lights, fill / fade / pulse / sweep tools, regenerate a selection, undo/redo.
 - **Record**: five pads in the Glyph Composer layout; jam on the lights, or record hits over

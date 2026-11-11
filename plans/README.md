@@ -19,7 +19,7 @@ Plans are numbered by finding; the **recommended execution order** is the order 
 | 7 | [007](007-clean-up-failed-writes.md) | Failed writes/imports leave nothing behind | P2 | S | — | DONE |
 | 8 | [006](006-backup-rules.md) | Cloud backup within quota; D2D keeps projects | P2 | S | — | DONE |
 | 9 | [008](008-docs-catch-up.md) | README and ADRs match the app | P2 | S | after 001/002 (README) | DONE |
-| 10 | [012](012-import-glyph-ringtones.md) | Importing a Glyph ringtone keeps its lights | P2 | M | 007 (both edit `ProjectStore.create`) | TODO |
+| 10 | [012](012-import-glyph-ringtones.md) | Importing a Glyph ringtone keeps its lights | P2 | M | 007 (both edit `ProjectStore.create`) | DONE (device run pending) |
 | 11 | [011](011-export-a-range.md) | Export part of the song | P2 | M–L | 004 (both edit `export/`) | TODO |
 | 12 | [013](013-set-as-notification-or-alarm.md) | Set as notification or alarm sound | P3 | S | 004 (same file) | TODO |
 | 13 | [009](009-release-build.md) | Signed, shrunk release build, no secrets in git | P3 | M | 014 (to verify on device) | TODO |
