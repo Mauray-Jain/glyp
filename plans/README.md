@@ -16,7 +16,7 @@ Plans are numbered by finding; the **recommended execution order** is the order 
 | 4 | [005](005-test-undoable-deletes.md) | Undoable deletes are unit-tested | P1 | S | — | DONE |
 | 5 | [014](014-device-smoke-script.md) | One-command device check | P2 | S–M | — | DONE (device run pending) |
 | 6 | [003](003-test-glyph-controller.md) | GlyphController logic is unit-tested | P1 | M | — (014 helps verify) | DONE (device run pending) |
-| 7 | [007](007-clean-up-failed-writes.md) | Failed writes/imports leave nothing behind | P2 | S | — | TODO |
+| 7 | [007](007-clean-up-failed-writes.md) | Failed writes/imports leave nothing behind | P2 | S | — | DONE |
 | 8 | [006](006-backup-rules.md) | Cloud backup within quota; D2D keeps projects | P2 | S | — | TODO |
 | 9 | [008](008-docs-catch-up.md) | README and ADRs match the app | P2 | S | after 001/002 (README) | TODO |
 | 10 | [012](012-import-glyph-ringtones.md) | Importing a Glyph ringtone keeps its lights | P2 | M | 007 (both edit `ProjectStore.create`) | TODO |

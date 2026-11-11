@@ -9,6 +9,8 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import java.io.File
+import java.io.IOException
+import java.io.InputStream
 
 class ProjectStoreTest {
 
@@ -88,5 +90,76 @@ class ProjectStoreTest {
         assertEquals(listOf(new.meta.id, old.meta.id), s.list().map { it.id })
         s.delete(old.meta.id)
         assertEquals(listOf(new.meta.id), s.list().map { it.id })
+    }
+
+    @Test
+    fun `a failed write leaves no temp file and the old lights intact`() = runTest {
+        val s = store()
+        val p = s.create("a.ogg", 1_000, autoCompose = false) { "x".byteInputStream() }
+        s.save(p.meta, p.lights.copy().apply { this[0, 0] = 7 })
+        File(tmp.root, "${p.meta.id}/lights.bin.tmp").mkdirs()
+        runCatching { s.save(p.meta, p.lights.copy().apply { this[0, 0] = 99 }) }
+        assertFalse(File(tmp.root, "${p.meta.id}/lights.bin.tmp").isFile)
+        assertEquals(7, s.load(p.meta.id).lights[0, 0])
+    }
+
+    @Test
+    fun `an import whose song can't be opened leaves no folder`() = runTest {
+        val result = runCatching { store().create("a.ogg", 1_000, autoCompose = false) { throw IOException("gone") } }
+        assertTrue(result.exceptionOrNull() is IOException)
+        assertEquals(emptyList<String>(), tmp.root.list()!!.toList())
+    }
+
+    @Test
+    fun `an import that fails mid-copy leaves no folder`() = runTest {
+        val failing = object : InputStream() {
+            private var reads = 0
+            override fun read(): Int = throw IOException("unplugged")
+            override fun read(b: ByteArray, off: Int, len: Int): Int {
+                if (++reads > 1) throw IOException("unplugged")
+                b.fill(1, off, off + len)
+                return len
+            }
+        }
+        val result = runCatching { store().create("a.ogg", 1_000, autoCompose = false) { failing } }
+        assertTrue(result.exceptionOrNull() is IOException)
+        assertEquals(emptyList<String>(), tmp.root.list()!!.toList())
+    }
+
+    @Test
+    fun `list removes a folder abandoned for over an hour`() = runTest {
+        clock = 10 * HOUR
+        val abandoned = File(tmp.root, "dead").apply { mkdirs() }
+        File(abandoned, "audio.mp3.tmp").writeText("half a song")
+        abandoned.setLastModified(clock - 2 * HOUR)
+        store().list()
+        assertFalse(abandoned.exists())
+    }
+
+    @Test
+    fun `list keeps a folder whose import may still be running`() = runTest {
+        clock = 10 * HOUR
+        val importing = File(tmp.root, "busy").apply { mkdirs() }
+        importing.setLastModified(clock - 60_000)
+        store().list()
+        assertTrue(importing.exists())
+    }
+
+    @Test
+    fun `the sweep never removes a project however old, only its stale temp files`() = runTest {
+        val s = store()
+        val p = s.create("a.ogg", 1_000, autoCompose = false) { "x".byteInputStream() }
+        val dir = File(tmp.root, p.meta.id)
+        val staleTmp = File(dir, "lights.bin.tmp").apply { writeText("x") }
+        clock = 100 * HOUR
+        dir.listFiles()!!.forEach { it.setLastModified(1_000) }
+        dir.setLastModified(1_000)
+        assertEquals(listOf(p.meta.id), s.list().map { it.id })
+        assertTrue(File(dir, "project.json").exists())
+        assertFalse(staleTmp.exists())
+    }
+
+    private companion object {
+        const val HOUR = 60 * 60_000L
     }
 }

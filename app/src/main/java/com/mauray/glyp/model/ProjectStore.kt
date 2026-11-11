@@ -43,6 +43,7 @@ class ProjectStore(
     private val json = Json { ignoreUnknownKeys = true; prettyPrint = true }
 
     suspend fun list(): List<ProjectMeta> = withContext(io) {
+        sweepAbandoned()
         root.listFiles().orEmpty()
             .mapNotNull { dir -> runCatching { readMeta(dir) }.getOrNull() }
             .sortedByDescending { it.updatedAt }
@@ -61,12 +62,19 @@ class ProjectStore(
     ): Project = withContext(io) {
         val id = UUID.randomUUID().toString()
         val dir = File(root, id).apply { mkdirs() }
-        val audioFile = File(dir, "audio." + fileName.substringAfterLast('.', "audio"))
-        writeAtomically(audioFile) { out -> openAudio().use { it.copyTo(out) } }
-        val time = now()
-        val meta = ProjectMeta(id, fileName.substringBeforeLast('.'), audioFile.name, durationMs, time, time, autoCompose)
-        val lights = LightTrack(Timebase.framesFor(durationMs))
-        Project(save(meta, lights), audioFile, lights)
+        try {
+            val audioFile = File(dir, "audio." + fileName.substringAfterLast('.', "audio"))
+            writeAtomically(audioFile) { out -> openAudio().use { it.copyTo(out) } }
+            val time = now()
+            val meta = ProjectMeta(id, fileName.substringBeforeLast('.'), audioFile.name, durationMs, time, time, autoCompose)
+            val lights = LightTrack(Timebase.framesFor(durationMs))
+            Project(save(meta, lights), audioFile, lights)
+        } catch (e: Exception) {
+            // A failed or cancelled import would otherwise leave a half-copied song nobody can
+            // see or delete. Cancellation is an Exception too, so it cleans up and propagates.
+            dir.deleteRecursively()
+            throw e
+        }
     }
 
     suspend fun load(id: String): Project = withContext(io) {
@@ -104,17 +112,43 @@ class ProjectStore(
 
     private fun writeAtomically(file: File, write: (OutputStream) -> Unit) {
         file.parentFile?.mkdirs()
-        val tmp = File(file.parentFile, file.name + ".tmp")
-        tmp.outputStream().use { out ->
-            write(out)
-            out.flush()
-            out.fd.sync()
+        val tmp = File(file.parentFile, file.name + TMP)
+        try {
+            tmp.outputStream().use { out ->
+                write(out)
+                out.flush()
+                out.fd.sync()
+            }
+            Files.move(tmp.toPath(), file.toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
+        } catch (e: Exception) {
+            tmp.delete()
+            throw e
         }
-        Files.move(tmp.toPath(), file.toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
+    }
+
+    /**
+     * Removes what crashed or killed writes left behind: project folders that never got a
+     * project.json, and stray temp files. Only once they are an hour old: a folder without
+     * project.json may be an import still copying its song right now.
+     */
+    private fun sweepAbandoned() {
+        val cutoff = now() - ABANDONED_MS
+        for (dir in root.listFiles().orEmpty()) {
+            if (!dir.isDirectory) continue
+            if (!File(dir, META).exists()) {
+                if (dir.lastModified() < cutoff) dir.deleteRecursively()
+                continue
+            }
+            dir.listFiles { f -> f.isFile && f.name.endsWith(TMP) && f.lastModified() < cutoff }
+                .orEmpty()
+                .forEach { it.delete() }
+        }
     }
 
     private companion object {
         const val META = "project.json"
         const val LIGHTS = "lights.bin"
+        const val TMP = ".tmp"
+        const val ABANDONED_MS = 60 * 60_000L
     }
 }
