@@ -77,21 +77,29 @@ class RingtoneInstaller(context: Context) {
             null,
         )?.use { if (it.moveToFirst()) ContentUris.withAppendedId(collection, it.getLong(0)) else null }
 
+    /**
+     * Overwrites our earlier ringtone at [uri] with [file]. If the write fails part-way the old
+     * file is put back, so a ringtone that is the phone's default never ends up truncated.
+     */
     private fun replace(uri: Uri, file: ByteArray, title: String) {
         val resolver = appContext.contentResolver
         resolver.update(uri, ContentValues().apply { put(MediaStore.Audio.Media.IS_PENDING, 1) }, null, null)
+        var written = false
         try {
-            resolver.openOutputStream(uri, "wt")!!.use { it.write(file) }
-        } finally {
-            resolver.update(
-                uri,
-                ContentValues().apply {
-                    put(MediaStore.Audio.Media.IS_PENDING, 0)
-                    put(MediaStore.Audio.Media.TITLE, title)
-                },
-                null,
-                null,
+            overwriteWithRollback(
+                readOld = { resolver.openInputStream(uri)!!.use { it.readBytes() } },
+                write = { bytes -> resolver.openOutputStream(uri, "wt")!!.use { it.write(bytes) } },
+                new = file,
             )
+            written = true
+        } finally {
+            // Never leave the entry pending: the system ringtone picker can't see pending files.
+            // The title only changes with the content; after a rollback the old title still fits.
+            val values = ContentValues().apply {
+                put(MediaStore.Audio.Media.IS_PENDING, 0)
+                if (written) put(MediaStore.Audio.Media.TITLE, title)
+            }
+            resolver.update(uri, values, null, null)
         }
     }
 
