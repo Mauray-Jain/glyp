@@ -21,11 +21,12 @@ jobs:
           distribution: temurin
           java-version: 17
 
+      # The action's default package list includes "tools", which the SDK repository no longer
+      # has. The platform is "android-37.0": there is no plain "android-37".
       - uses: android-actions/setup-android@v3
-
-      # The SDK repository names the platform "android-37.0"; there is no plain "android-37".
-      - name: Android platform 37 and build-tools 37.0.0
-        run: sdkmanager "platforms;android-37.0" "build-tools;37.0.0"
+        with:
+          packages: platform-tools platforms;android-37.0 build-tools;37.0.0
+          log-accepted-android-sdk-licenses: false
 
       - uses: gradle/actions/setup-gradle@v4
 
