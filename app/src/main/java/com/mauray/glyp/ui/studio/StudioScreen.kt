@@ -2,6 +2,7 @@ package com.mauray.glyp.ui.studio
 
 import android.app.Application
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -24,6 +25,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
@@ -69,6 +71,7 @@ import com.mauray.glyp.ui.theme.Surface1
 import com.mauray.glyp.ui.theme.Surface2
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * Gives each opened project its own ViewModel that is cleared (take committed, edits saved)
@@ -97,6 +100,13 @@ fun StudioScreen(projectId: String, onBack: () -> Unit) {
     LifecycleEventEffect(Lifecycle.Event.ON_STOP) { session.pause() }
     LaunchedEffect(session) { session.messages.collect { snackbar.showSnackbar(it) } }
     // Record with Replace shows only the pads, playing or recording: what the take will keep.
+    // Frames are dropped while Nothing OS has the Glyphs off, so say so once when that starts.
+    LaunchedEffect(glyphState == GlyphController.State.SWITCHED_OFF) {
+        if (glyphState == GlyphController.State.SWITCHED_OFF) {
+            // Brief: it's a heads-up, and tapping the status shows it again.
+            withTimeoutOrNull(AUTO_HINT_MS) { snackbar.showSnackbar(GLYPHS_OFF_HINT, duration = SnackbarDuration.Indefinite) }
+        }
+    }
     LaunchedEffect(vm.controls.mode, vm.controls.overdub) {
         session.muteTrack(vm.controls.mode == StudioMode.RECORD && !vm.controls.overdub)
     }
@@ -105,6 +115,10 @@ fun StudioScreen(projectId: String, onBack: () -> Unit) {
         s = s,
         controls = vm.controls,
         glyphState = glyphState,
+        onGlyphsOff = {
+            val hint = if (glyphState == GlyphController.State.SCREEN_UP) SCREEN_UP_HINT else GLYPHS_OFF_HINT
+            scope.launch { snackbar.showSnackbar(hint) }
+        },
         actions = session,
         snackbar = snackbar,
         onBack = { session.pause(); onBack() },
@@ -150,6 +164,8 @@ internal fun StudioLayout(
     s: StudioState,
     controls: StudioControls,
     glyphState: GlyphController.State,
+    /** Explains how to turn the system's Glyphs back on; the status is tappable while they're off. */
+    onGlyphsOff: () -> Unit = {},
     actions: StudioActions,
     snackbar: SnackbarHostState,
     onBack: () -> Unit,
@@ -196,7 +212,7 @@ internal fun StudioLayout(
                 }
                 is StudioState.Failed -> StatusBody(s.message) {}
                 is StudioState.Open -> {
-                    StudioHeader(s, glyphState)
+                    StudioHeader(s, glyphState, onGlyphsOff)
                     when (controls.mode) {
                         // Record is one fixed screen: lights and pads visible together, no scrolling.
                         StudioMode.RECORD -> RecordLayout(actions, s, controls, Modifier.weight(1f))
@@ -228,7 +244,7 @@ private fun StatusBody(headline: String, below: @Composable () -> Unit) {
 private val TopBarHeight = 72.dp
 
 @Composable
-private fun StudioHeader(s: StudioState.Open, glyphState: GlyphController.State) {
+private fun StudioHeader(s: StudioState.Open, glyphState: GlyphController.State, onGlyphsOff: () -> Unit) {
     Column(Modifier.padding(horizontal = 24.dp).padding(top = 8.dp)) {
         Text(s.name, style = MaterialTheme.typography.headlineMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
         Spacer(Modifier.height(8.dp))
@@ -244,11 +260,14 @@ private fun StudioHeader(s: StudioState.Open, glyphState: GlyphController.State)
             )
             Spacer(Modifier.weight(1f))
             val live = glyphState == GlyphController.State.READY
+            val off = glyphState == GlyphController.State.SWITCHED_OFF || glyphState == GlyphController.State.SCREEN_UP
             Text(
                 glyphStatus(glyphState),
                 style = MaterialTheme.typography.labelSmall,
                 color = if (live) NothingRed else Muted,
-                modifier = Modifier.padding(bottom = 5.dp),
+                modifier = Modifier
+                    .then(if (off) Modifier.clickable(onClickLabel = "Why the Glyphs are dark", onClick = onGlyphsOff) else Modifier)
+                    .padding(bottom = 5.dp),
             )
         }
     }
@@ -476,10 +495,20 @@ private fun ExportDialog(
     )
 }
 
+private const val AUTO_HINT_MS = 2_000L
+
+private const val GLYPHS_OFF_HINT =
+    "The Glyphs are switched off (by their Quick Settings tile or bedtime schedule). Turn them on to see the lights."
+
+// Not shown on its own: the phone goes screen-up and back all the time while editing.
+private const val SCREEN_UP_HINT = "The Glyphs stay dark while the phone lies screen-up. Lift it or turn it over to see them."
+
 private fun glyphStatus(state: GlyphController.State) = when (state) {
     GlyphController.State.READY -> "● LIVE"
     GlyphController.State.CONNECTING -> "CONNECTING"
-    GlyphController.State.FAILED -> "GLYPH OFF"
+    GlyphController.State.SWITCHED_OFF -> "GLYPHS OFF"
+    GlyphController.State.SCREEN_UP -> "SCREEN UP"
+    GlyphController.State.FAILED -> "NO GLYPH ACCESS"
     GlyphController.State.UNSUPPORTED -> "PREVIEW"
 }
 
