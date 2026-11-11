@@ -152,6 +152,9 @@ class StudioSession(
             throw e
         } catch (e: Exception) {
             _state.value = StudioState.Failed("Couldn't open project: ${e.message}")
+        } catch (e: OutOfMemoryError) {
+            // One huge allocation for the song failed; the app itself is fine.
+            _state.value = StudioState.Failed(TOO_LONG)
         }
     }
 
@@ -297,6 +300,8 @@ class StudioSession(
             throw e
         } catch (e: Exception) {
             Result.failure(e)
+        } catch (e: OutOfMemoryError) {
+            Result.failure(IllegalStateException(TOO_LONG, e))
         } finally {
             relay.cancel()
             setExporting(o, null)
@@ -336,5 +341,6 @@ class StudioSession(
 
     private companion object {
         const val AUTOSAVE_DELAY_MS = 500L
+        const val TOO_LONG = "This song is too long for this phone's memory."
     }
 }

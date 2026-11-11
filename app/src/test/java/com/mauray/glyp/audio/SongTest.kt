@@ -57,4 +57,21 @@ class SongTest {
         assertEquals(2000f / 32768f, mono[0], 1e-6f)
         assertEquals(GlyphZones.FPS, Timebase.framesFor(1_000))
     }
+
+    @Test
+    fun `decimated mono averages each group of frames`() {
+        val pcm = PcmAudio(shortArrayOf(0, 2000, 4000, 6000, 8000), 44_100, 1)
+        val mono = pcm.toMono(decimation = 2)
+        assertEquals("a partial last group is dropped", 2, mono.size)
+        assertEquals(1000f / 32768f, mono[0], 1e-6f)
+        assertEquals(5000f / 32768f, mono[1], 1e-6f)
+    }
+
+    @Test
+    fun `spare room in the sample buffer is not part of the song`() {
+        val rate = 6_000
+        val samples = ShortArray(rate * 2) { i -> if (i >= rate) Short.MAX_VALUE else 0 }
+        val song = Song.of(PcmAudio(samples, rate, 1, frameCount = rate), frameCount = 60)
+        assertTrue("the loud tail past frameCount is ignored", song.waveform.all { it == 0f })
+    }
 }

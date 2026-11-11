@@ -37,6 +37,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.progressBarRangeInfo
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.setProgress
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
@@ -184,6 +190,17 @@ fun PillSlider(
             .height(52.dp)
             .clip(CircleShape)
             .background(Surface1)
+            // A real slider to TalkBack: announced with its value, adjustable by swiping.
+            .semantics(mergeDescendants = true) {
+                contentDescription = label
+                stateDescription = valueText
+                progressBarRangeInfo = ProgressBarRangeInfo(value.coerceIn(range), range, steps = 19)
+                setProgress { target ->
+                    latestOnChange.value(target.coerceIn(range))
+                    latestOnFinished.value()
+                    true
+                }
+            }
             .pointerInput(range) {
                 fun set(x: Float) {
                     val f = (x / size.width).coerceIn(0f, 1f)

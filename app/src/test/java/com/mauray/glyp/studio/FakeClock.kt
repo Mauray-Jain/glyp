@@ -15,6 +15,7 @@ class FakeClock(private val scope: CoroutineScope, private val scheduler: TestCo
     private var from = 0L
     private var end: Job? = null
     private var onEnd: () -> Unit = {}
+    private var onInterrupt: () -> Unit = {}
     var released = false
         private set
 
@@ -45,6 +46,16 @@ class FakeClock(private val scope: CoroutineScope, private val scheduler: TestCo
 
     override fun setOnEnd(listener: () -> Unit) {
         onEnd = listener
+    }
+
+    override fun setOnInterrupt(listener: () -> Unit) {
+        onInterrupt = listener
+    }
+
+    /** Another app takes the audio. */
+    fun interrupt() {
+        pause()
+        onInterrupt()
     }
 
     override fun release() {

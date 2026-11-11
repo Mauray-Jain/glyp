@@ -17,8 +17,9 @@ object OpusTranscoder {
 
     fun encode(pcm: PcmAudio, output: File, onProgress: (Float) -> Unit = {}) {
         val channels = minOf(pcm.channels, 2)
-        val samples = resample(downmix(pcm, channels), pcm.sampleRate, OPUS_RATE, channels)
-        val totalFrames = samples.size / channels
+        // Read a frame at a time: a resampled copy of a long song doesn't fit next to the PCM.
+        val source = Resampled(pcm, channels, OPUS_RATE)
+        val totalFrames = source.frameCount
 
         val format = MediaFormat.createAudioFormat(MediaFormat.MIMETYPE_AUDIO_OPUS, OPUS_RATE, channels).apply {
             setInteger(MediaFormat.KEY_BIT_RATE, BITRATE)
@@ -30,7 +31,7 @@ object OpusTranscoder {
         val muxer = MediaMuxer(output.absolutePath, MediaMuxer.OutputFormat.MUXER_OUTPUT_OGG)
         var track = -1
         val info = MediaCodec.BufferInfo()
-        var inputPos = 0 // in samples (all channels)
+        var inputFrame = 0
         var inputDone = false
         var outputDone = false
 
@@ -41,16 +42,19 @@ object OpusTranscoder {
                     if (inIndex >= 0) {
                         val buf = codec.getInputBuffer(inIndex)!!.order(ByteOrder.nativeOrder())
                         buf.clear()
-                        val count = minOf(buf.capacity() / 2, samples.size - inputPos)
-                        val timeUs = (inputPos / channels).toLong() * 1_000_000 / OPUS_RATE
-                        if (count <= 0) {
+                        val frames = minOf(buf.capacity() / (2 * channels), totalFrames - inputFrame)
+                        val timeUs = inputFrame.toLong() * 1_000_000 / OPUS_RATE
+                        if (frames <= 0) {
                             codec.queueInputBuffer(inIndex, 0, 0, timeUs, MediaCodec.BUFFER_FLAG_END_OF_STREAM)
                             inputDone = true
                         } else {
-                            buf.asShortBuffer().put(samples, inputPos, count)
-                            codec.queueInputBuffer(inIndex, 0, count * 2, timeUs, 0)
-                            inputPos += count
-                            onProgress(inputPos.toFloat() / samples.size)
+                            val shorts = buf.asShortBuffer()
+                            for (f in inputFrame until inputFrame + frames) {
+                                for (c in 0 until channels) shorts.put(source[f, c])
+                            }
+                            codec.queueInputBuffer(inIndex, 0, frames * channels * 2, timeUs, 0)
+                            inputFrame += frames
+                            onProgress(inputFrame.toFloat() / totalFrames)
                         }
                     }
                 }
@@ -80,41 +84,30 @@ object OpusTranscoder {
         }
         check(totalFrames > 0) { "Audio is empty" }
     }
+}
 
-    private fun downmix(pcm: PcmAudio, channels: Int): ShortArray {
-        if (pcm.channels == channels) return pcm.samples
-        val frames = pcm.frameCount
-        val out = ShortArray(frames * channels)
-        for (i in 0 until frames) {
-            for (c in 0 until channels) {
-                // Fold extra channels evenly into left/right.
-                var sum = 0
-                var n = 0
-                for (src in c until pcm.channels step channels) { sum += pcm.samples[i * pcm.channels + src]; n++ }
-                out[i * channels + c] = (sum / n).toShort()
-            }
-        }
-        return out
+/**
+ * [pcm] with extra channels folded evenly into [channels] and linearly resampled to [rate]
+ * (fine for ringtones, not for mastering), read a frame at a time.
+ */
+internal class Resampled(private val pcm: PcmAudio, private val channels: Int, rate: Int) {
+    private val step = pcm.sampleRate.toDouble() / rate
+    val frameCount = (pcm.frameCount.toLong() * rate / pcm.sampleRate).toInt()
+
+    operator fun get(frame: Int, channel: Int): Short {
+        val pos = frame * step
+        val i0 = pos.toInt().coerceAtMost(pcm.frameCount - 1)
+        val i1 = (i0 + 1).coerceAtMost(pcm.frameCount - 1)
+        val a = folded(i0, channel)
+        val b = folded(i1, channel)
+        return (a + (b - a) * (pos - i0)).toInt().toShort()
     }
 
-    /** Linear-interpolation resampler; fine for ringtones, not for mastering. */
-    private fun resample(input: ShortArray, fromRate: Int, toRate: Int, channels: Int): ShortArray {
-        if (fromRate == toRate) return input
-        val inFrames = input.size / channels
-        val outFrames = (inFrames.toLong() * toRate / fromRate).toInt()
-        val out = ShortArray(outFrames * channels)
-        val step = fromRate.toDouble() / toRate
-        for (i in 0 until outFrames) {
-            val pos = i * step
-            val i0 = pos.toInt().coerceAtMost(inFrames - 1)
-            val i1 = (i0 + 1).coerceAtMost(inFrames - 1)
-            val frac = pos - i0
-            for (c in 0 until channels) {
-                val a = input[i0 * channels + c]
-                val b = input[i1 * channels + c]
-                out[i * channels + c] = (a + (b - a) * frac).toInt().toShort()
-            }
-        }
-        return out
+    private fun folded(frame: Int, channel: Int): Int {
+        if (pcm.channels == channels) return pcm[frame, channel].toInt()
+        var sum = 0
+        var n = 0
+        for (src in channel until pcm.channels step channels) { sum += pcm[frame, src]; n++ }
+        return sum / n
     }
 }

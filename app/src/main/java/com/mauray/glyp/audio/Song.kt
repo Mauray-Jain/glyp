@@ -40,19 +40,22 @@ class Song private constructor(
 
         /** Analyses already decoded audio; pure JVM. */
         fun of(pcm: PcmAudio, frameCount: Int, onProgress: (Float) -> Unit = {}): Song {
-            val mono = pcm.toMono()
-            val analysis = AudioAnalyzer.analyze(mono, pcm.sampleRate, frameCount, onProgress)
-            return Song(pcm, frameCount, analysis, waveform(mono, pcm.sampleRate, frameCount))
+            // Mixed down and decimated in one pass: a full-rate float copy of a long song
+            // doesn't fit in the app's memory next to the PCM.
+            val decimation = AudioAnalyzer.decimationFor(pcm.sampleRate)
+            val mono = pcm.toMono(decimation)
+            val analysis = AudioAnalyzer.analyze(mono, pcm.sampleRate / decimation, frameCount, onProgress)
+            return Song(pcm, frameCount, analysis, waveform(pcm, frameCount))
         }
 
-        private fun waveform(mono: FloatArray, sampleRate: Int, frames: Int): FloatArray {
+        private fun waveform(pcm: PcmAudio, frames: Int): FloatArray {
             val out = FloatArray(frames)
-            val perFrame = sampleRate.toDouble() / GlyphZones.FPS
+            val perFrame = pcm.sampleRate.toDouble() / GlyphZones.FPS
             for (t in 0 until frames) {
                 val from = (t * perFrame).toInt()
-                val to = minOf(mono.size, ((t + 1) * perFrame).toInt())
+                val to = minOf(pcm.frameCount, ((t + 1) * perFrame).toInt())
                 var peak = 0f
-                for (i in from until to) peak = max(peak, abs(mono[i]))
+                for (i in from until to) peak = max(peak, abs(pcm.monoAt(i)))
                 out[t] = peak
             }
             val ref = out.maxOrNull()?.takeIf { it > 0f } ?: 1f

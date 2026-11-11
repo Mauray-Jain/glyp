@@ -37,7 +37,9 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
             _busy.value = true
             try {
                 val duration = withContext(Dispatchers.IO) { durationOf(audio) }
-                require(duration > 0) { "Couldn't read the length of that file" }
+                require(duration > 0) { "That file isn't a song Glyp can read." }
+                // The whole song is decoded into memory; longer ones don't fit on every phone.
+                require(duration / 1000 <= MAX_SONG_MS / 1000) { "Pick a song up to ${MAX_SONG_MS / 60_000} minutes long." }
                 val resolver = getApplication<Application>().contentResolver
                 val fileName = withContext(Dispatchers.IO) { displayNameOf(audio) } ?: "Untitled"
                 val project = store.create(fileName, duration, autoCompose) {
@@ -68,13 +70,20 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
             .query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
             ?.use { if (it.moveToFirst()) it.getString(0) else null }
 
+    /** The song's length, or 0 when the file can't be read as audio. */
     private fun durationOf(uri: Uri): Long {
         val retriever = MediaMetadataRetriever()
         return try {
             retriever.setDataSource(getApplication(), uri)
             retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L
+        } catch (e: RuntimeException) {
+            0L
         } finally {
             retriever.release()
         }
+    }
+
+    private companion object {
+        const val MAX_SONG_MS = 10 * 60_000L
     }
 }

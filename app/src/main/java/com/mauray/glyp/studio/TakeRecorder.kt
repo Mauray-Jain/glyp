@@ -58,6 +58,8 @@ class TakeRecorder(
 
     init {
         clock.setOnEnd(::onEnd)
+        // Losing the audio stops playback like the pause button would, keeping any take.
+        clock.setOnInterrupt(::pause)
         // Edits change what the playhead shows; while ticking the next tick picks them up.
         scope.launch { document.revision.collect { if (tick?.isActive != true) render() } }
     }

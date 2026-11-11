@@ -115,6 +115,23 @@ class StudioSessionTest {
     }
 
     @Test
+    fun `a song too big for memory fails with a message instead of crashing`() = runTest {
+        val id = kotlinx.coroutines.runBlocking {
+            store.create("Long.ogg", 10_000, autoCompose = false) { "audio".byteInputStream() }.meta.id
+        }
+        val session = StudioSession(
+            id, backgroundScope, store,
+            loadSong = { _, _, _ -> throw OutOfMemoryError("52920016 byte allocation") },
+            openClock = { error("unused") },
+            exportRingtone = { _, _ -> error("unused") },
+            showLights = {},
+            compute = StandardTestDispatcher(testScheduler),
+        )
+        testScheduler.runCurrent()
+        assertEquals("This song is too long for this phone's memory.", (session.state.value as StudioState.Failed).message)
+    }
+
+    @Test
     fun `phase follows play, record and stop`() = runTest {
         val r = rig()
         r.session.togglePlay()

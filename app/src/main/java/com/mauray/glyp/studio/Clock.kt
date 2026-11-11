@@ -21,5 +21,11 @@ interface Clock {
     /** [listener] runs, on the thread that owns the clock, each time the song plays to its end. */
     fun setOnEnd(listener: () -> Unit)
 
+    /**
+     * [listener] runs, on the thread that owns the clock, when something else takes the audio
+     * (a call, another app's music) and the clock has paused itself.
+     */
+    fun setOnInterrupt(listener: () -> Unit)
+
     fun release()
 }

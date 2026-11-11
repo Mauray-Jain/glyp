@@ -43,8 +43,11 @@ object AudioAnalyzer {
     private const val MIN_HZ = 40.0
     private const val MAX_HZ = 11_000.0
 
+    /** How many input samples to average into one, so analysis runs near [TARGET_RATE]. */
+    fun decimationFor(sampleRate: Int): Int = max(1, sampleRate / TARGET_RATE)
+
     fun analyze(mono: FloatArray, sampleRate: Int, frameCount: Int, onProgress: (Float) -> Unit = {}): Analysis {
-        val factor = max(1, sampleRate / TARGET_RATE)
+        val factor = decimationFor(sampleRate)
         val signal = if (factor == 1) mono else downsample(mono, factor)
         val rate = sampleRate.toDouble() / factor
 

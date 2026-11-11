@@ -89,6 +89,21 @@ class TakeRecorderTest {
     }
 
     @Test
+    fun `losing the audio to a call pauses and keeps the take`() = runTest {
+        val r = rig()
+        r.recorder.record(overdub = true)
+        r.recorder.pressPad(Pad.TOP, 1f)
+        advance(1_000)
+        r.clock.interrupt()
+        testScheduler.runCurrent()
+        val live = r.recorder.live.value
+        assertFalse(live.playing)
+        assertFalse(live.recording)
+        assertTrue("the take was committed", r.doc.canUndo)
+        assertEquals(GlyphZones.MAX_BRIGHTNESS, r.doc[30, topZone])
+    }
+
+    @Test
     fun `replace overwrites existing lights where no pad is held`() = runTest {
         val r = rig { track -> for (f in 0 until 600) track[f, rightZone] = 1000 }
         r.recorder.record(overdub = false)

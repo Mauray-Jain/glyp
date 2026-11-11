@@ -119,9 +119,14 @@ fun StudioScreen(projectId: String, onBack: () -> Unit) {
                     )
                 }
             },
-            onSetRingtone = { ringtone ->
-                val message = if (ringtone.setAsDefault()) "Set as your ringtone" else "Allow \"Modify system settings\", then tap again"
-                scope.launch { snackbar.showSnackbar(message) }
+            onSetRingtone = { saved ->
+                // Said in the dialog: a snackbar would sit behind it, or fade while Settings is open.
+                val note = if (saved.ringtone.setAsDefault()) {
+                    "It's now your ringtone."
+                } else {
+                    "Allow Glyp to modify system settings, then come back and tap again."
+                }
+                export = saved.copy(note = note)
             },
             onDismiss = { export = ExportStage.Closed },
         )
@@ -360,7 +365,8 @@ private sealed interface ExportStage {
     /** Naming the ringtone; [error] says why the last attempt failed, if it did. */
     data class Form(val error: String? = null) : ExportStage
     data object Encoding : ExportStage
-    data class Saved(val ringtone: Ringtone) : ExportStage
+    /** [note] says how the last "Set as ringtone" went, if it was tapped. */
+    data class Saved(val ringtone: Ringtone, val note: String? = null) : ExportStage
 }
 
 @Composable
@@ -369,7 +375,7 @@ private fun ExportDialog(
     phase: Phase,
     name: String,
     onExport: (title: String) -> Unit,
-    onSetRingtone: (Ringtone) -> Unit,
+    onSetRingtone: (ExportStage.Saved) -> Unit,
     onDismiss: () -> Unit,
 ) {
     var title by remember { mutableStateOf(name) }
@@ -383,10 +389,16 @@ private fun ExportDialog(
         text = {
             Column {
                 when (stage) {
-                    is ExportStage.Saved -> Text(
-                        "Find it in Settings → Sound → Ringtone, or set it now and the lights play on your next call.",
-                        color = Muted,
-                    )
+                    is ExportStage.Saved -> {
+                        Text(
+                            "Find it in Settings → Sound → Ringtone, or set it now and the lights play on your next call.",
+                            color = Muted,
+                        )
+                        stage.note?.let { note ->
+                            Spacer(Modifier.height(12.dp))
+                            Text(note, style = MaterialTheme.typography.bodySmall, color = Color.White)
+                        }
+                    }
                     ExportStage.Encoding -> {
                         Text("ENCODING", style = MaterialTheme.typography.labelSmall, color = Muted)
                         Spacer(Modifier.height(12.dp))
@@ -421,7 +433,7 @@ private fun ExportDialog(
         },
         confirmButton = {
             when (stage) {
-                is ExportStage.Saved -> PillButton("Set as ringtone", { onSetRingtone(stage.ringtone) }, height = 48.dp)
+                is ExportStage.Saved -> PillButton("Set as ringtone", { onSetRingtone(stage) }, height = 48.dp)
                 ExportStage.Encoding -> Unit
                 else -> PillButton(
                     if (stage is ExportStage.Form && stage.error != null) "Try again" else "Export",

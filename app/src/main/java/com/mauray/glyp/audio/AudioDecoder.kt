@@ -7,18 +7,35 @@ import android.media.MediaFormat
 import java.io.File
 import java.nio.ByteOrder
 
-/** Interleaved 16-bit PCM. */
-class PcmAudio(val samples: ShortArray, val sampleRate: Int, val channels: Int) {
-    val frameCount get() = samples.size / channels
+/**
+ * Interleaved 16-bit PCM: the first [frameCount] frames of [samples]. The array may be longer,
+ * so a whole song is never copied just to trim it.
+ */
+class PcmAudio(
+    val samples: ShortArray,
+    val sampleRate: Int,
+    val channels: Int,
+    val frameCount: Int = samples.size / channels,
+) {
     val durationMs get() = frameCount * 1000L / sampleRate
 
-    /** Mono float copy in -1..1, used for analysis. */
-    fun toMono(): FloatArray {
-        val out = FloatArray(frameCount)
+    /** Channel [c] of frame [i]. */
+    operator fun get(i: Int, c: Int): Short = samples[i * channels + c]
+
+    /** Frame [i] folded to mono, in -1..1. */
+    fun monoAt(i: Int): Float {
+        var sum = 0
+        for (c in 0 until channels) sum += samples[i * channels + c]
+        return sum / (channels * 32768f)
+    }
+
+    /** Mono float copy in -1..1 at 1/[decimation] of the rate, each value the mean of its frames. */
+    fun toMono(decimation: Int = 1): FloatArray {
+        val out = FloatArray(frameCount / decimation)
         for (i in out.indices) {
-            var sum = 0
-            for (c in 0 until channels) sum += samples[i * channels + c]
-            out[i] = sum / (channels * 32768f)
+            var sum = 0f
+            for (j in 0 until decimation) sum += monoAt(i * decimation + j)
+            out[i] = sum / decimation
         }
         return out
     }
@@ -95,20 +112,22 @@ object AudioDecoder {
             extractor.release()
         }
         onProgress(1f)
-        return PcmAudio(out.toArray(), sampleRate, channels)
+        return PcmAudio(out.array, sampleRate, channels, out.size / channels)
     }
 
     private const val TIMEOUT_US = 10_000L
 }
 
+/** The first [size] values of [array] are the data; the rest is spare room. */
 private class ShortGrowable(initial: Int) {
-    private var data = ShortArray(maxOf(initial, 1024))
-    private var size = 0
+    var array = ShortArray(maxOf(initial, 1024))
+        private set
+    var size = 0
+        private set
 
     fun add(v: Short) {
-        if (size == data.size) data = data.copyOf(data.size * 2)
-        data[size++] = v
+        // Grow by half: a whole song may already be in here.
+        if (size == array.size) array = array.copyOf(array.size + array.size / 2)
+        array[size++] = v
     }
-
-    fun toArray(): ShortArray = data.copyOf(size)
 }
