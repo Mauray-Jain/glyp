@@ -39,6 +39,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
@@ -182,7 +183,7 @@ internal fun StudioLayout(
                     Spacer(Modifier.height(20.dp))
                     LinearProgressIndicator(
                         progress = { s.progress },
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier.width(220.dp),
                         color = Color.White,
                         trackColor = Surface2,
                         gapSize = 0.dp,
@@ -203,14 +204,24 @@ internal fun StudioLayout(
     }
 }
 
-/** A headline in the middle of the screen, for loading and errors. */
+/**
+ * A headline in the middle of the screen, for loading and errors. It sits under the top bar,
+ * so it is lifted by the bar's height to land in the middle of the screen, not below it.
+ */
 @Composable
 private fun StatusBody(headline: String, below: @Composable () -> Unit) {
-    Column(Modifier.fillMaxSize().padding(32.dp), verticalArrangement = Arrangement.Center) {
-        Text(headline, style = MaterialTheme.typography.headlineMedium)
+    Column(
+        Modifier.fillMaxSize().padding(horizontal = 32.dp).padding(bottom = TopBarHeight),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text(headline, style = MaterialTheme.typography.headlineMedium, textAlign = TextAlign.Center)
         below()
     }
 }
+
+/** The top bar's 48 dp buttons plus its 12 dp padding above and below. */
+private val TopBarHeight = 72.dp
 
 @Composable
 private fun StudioHeader(s: StudioState.Open, glyphState: GlyphController.State) {
