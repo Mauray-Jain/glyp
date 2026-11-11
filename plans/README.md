@@ -12,7 +12,7 @@ Plans are numbered by finding; the **recommended execution order** is the order 
 |---|---|---|---|---|---|---|
 | 1 | [001](001-pin-gradle-daemon-jdk.md) | Gradle always runs on JDK 17 | P1 | S | — | DONE |
 | 2 | [002](002-ci-tests-and-screenshots.md) | CI runs tests, screenshots, lint, build | P1 | S | 001 (soft) | DONE |
-| 3 | [004](004-safe-ringtone-replace.md) | Re-export never leaves a broken ringtone | P1 | S | — | TODO |
+| 3 | [004](004-safe-ringtone-replace.md) | Re-export never leaves a broken ringtone | P1 | S | — | DONE |
 | 4 | [005](005-test-undoable-deletes.md) | Undoable deletes are unit-tested | P1 | S | — | TODO |
 | 5 | [014](014-device-smoke-script.md) | One-command device check | P2 | S–M | — | TODO |
 | 6 | [003](003-test-glyph-controller.md) | GlyphController logic is unit-tested | P1 | M | — (014 helps verify) | TODO |
