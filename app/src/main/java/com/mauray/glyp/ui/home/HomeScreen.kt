@@ -154,7 +154,7 @@ internal fun HomeLayout(
                     Text(
                         "HOLD TO DELETE",
                         style = MaterialTheme.typography.labelSmall,
-                        color = Muted.copy(alpha = 0.5f),
+                        color = Muted,
                         modifier = Modifier.padding(start = 4.dp, top = 8.dp),
                     )
                 }
@@ -176,7 +176,7 @@ internal fun StartChoice(onChoose: (autoCompose: Boolean) -> Unit) {
         Text(
             "NEXT: PICK A SONG",
             style = MaterialTheme.typography.labelSmall,
-            color = Muted.copy(alpha = 0.6f),
+            color = Muted,
             modifier = Modifier.padding(start = 4.dp),
         )
     }

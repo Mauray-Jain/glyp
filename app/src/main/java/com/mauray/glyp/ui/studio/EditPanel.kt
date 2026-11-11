@@ -9,9 +9,13 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
@@ -85,9 +89,16 @@ internal fun EditPanel(actions: StudioActions, controls: StudioControls) {
             "RANGE",
             if (range != null) "${formatTime(range.first)} – ${formatTime(range.last + 1)}" else null,
             "Drag the timeline",
-            Modifier.weight(1f),
+            onClear = { controls.select(null) },
+            modifier = Modifier.weight(1f),
         )
-        TargetCard("LIGHTS", describeZones(controls.selectedZones), "Tap the lights", Modifier.weight(1f))
+        TargetCard(
+            "LIGHTS",
+            describeZones(controls.selectedZones),
+            "Tap the lights",
+            onClear = { controls.selectedZones = emptySet() },
+            modifier = Modifier.weight(1f),
+        )
     }
 
     Spacer(Modifier.height(20.dp))
@@ -97,17 +108,23 @@ internal fun EditPanel(actions: StudioActions, controls: StudioControls) {
     }
 }
 
-/** What the tool will act on; shows a muted hint until it's been picked. */
+/**
+ * What the tool will act on; shows a hint until it's been picked, and once picked an ✕ says
+ * a tap clears it ([onClear]).
+ */
 @Composable
-private fun TargetCard(label: String, value: String?, hint: String, modifier: Modifier) {
-    NCard(modifier.height(84.dp)) {
+private fun TargetCard(label: String, value: String?, hint: String, onClear: () -> Unit, modifier: Modifier) {
+    NCard(modifier.height(84.dp), onClick = if (value != null) onClear else null) {
         Column(Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
-            Text(label, style = MaterialTheme.typography.labelSmall, color = Muted)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(label, style = MaterialTheme.typography.labelSmall, color = Muted, modifier = Modifier.weight(1f))
+                if (value != null) Icon(Icons.Filled.Close, "Clear ${label.lowercase()}", Modifier.size(16.dp), tint = Muted)
+            }
             Spacer(Modifier.weight(1f))
             Text(
                 value ?: hint,
                 style = MaterialTheme.typography.titleSmall,
-                color = if (value != null) Color.White else Muted.copy(alpha = 0.7f),
+                color = if (value != null) Color.White else Muted,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )

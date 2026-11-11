@@ -64,7 +64,8 @@ class TimelineState {
 
 /**
  * Waveform on top, then one row per zone (C, A, B groups) showing brightness over time.
- * One finger drags out a selection, a tap moves the playhead, two fingers pan and zoom.
+ * One finger drags out a selection, a tap moves the playhead (keeping the selection), two
+ * fingers pan and zoom.
  */
 @Composable
 fun Timeline(
@@ -138,10 +139,8 @@ fun Timeline(
                             }
                         }
                     } while (event.changes.any { it.pressed })
-                    if (!dragging && !zooming && !scrolling) {
-                        onSeek(state.frameAt(startX))
-                        onSelect(null)
-                    }
+                    // A tap only moves the playhead, so it can be put inside a selection.
+                    if (!dragging && !zooming && !scrolling) onSeek(state.frameAt(startX))
                 }
             },
     ) {

@@ -3,6 +3,7 @@ package com.mauray.glyp.export
 import com.mauray.glyp.audio.PcmAudio
 import com.mauray.glyp.model.LightTrack
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import java.io.File
 
@@ -18,8 +19,12 @@ class ExportJob(val title: String, val audioFile: File, val pcm: PcmAudio, val l
  */
 class RingtoneExporter(private val workDir: File, private val installer: RingtoneInstaller) {
 
+    /** Cancelling stops the encoding at its next progress report; nothing is saved then. */
     suspend fun export(job: ExportJob, onProgress: (Float) -> Unit = {}): Ringtone = withContext(Dispatchers.IO) {
-        val ringtone = GlyphRingtone.build(job.title, job.lights, job.durationMs, opusAudio(job, onProgress))
+        val context = coroutineContext
+        val audio = opusAudio(job) { context.ensureActive(); onProgress(it) }
+        val ringtone = GlyphRingtone.build(job.title, job.lights, job.durationMs, audio)
+        ensureActive()
         installer.install(ringtone, job.title).also { onProgress(1f) }
     }
 

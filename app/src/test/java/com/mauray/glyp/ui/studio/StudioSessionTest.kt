@@ -291,6 +291,21 @@ class StudioSessionTest {
     }
 
     @Test
+    fun `a cancelled export saves nothing and returns to idle`() = runTest {
+        val r = rig()
+        val export = launch { r.session.export("Ring") }
+        testScheduler.runCurrent()
+        assertTrue(r.open.phase is Phase.Exporting)
+        export.cancel()
+        testScheduler.runCurrent()
+        assertEquals(Phase.Idle, r.open.phase)
+        assertFalse("no Saved notice", r.messages.any { "Saved" in it })
+        r.session.paint(fill(0..10))
+        testScheduler.runCurrent()
+        assertTrue("editing works again", r.open.canUndo)
+    }
+
+    @Test
     fun `a failed export says why and returns to idle`() = runTest {
         val r = rig(exportFails = true)
         val export = async { r.session.export("Ring") }

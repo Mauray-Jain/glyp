@@ -66,6 +66,7 @@ import com.mauray.glyp.ui.theme.Muted
 import com.mauray.glyp.ui.theme.NothingRed
 import com.mauray.glyp.ui.theme.Surface1
 import com.mauray.glyp.ui.theme.Surface2
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
 /**
@@ -88,6 +89,7 @@ fun StudioScreen(projectId: String, onBack: () -> Unit) {
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     var export by remember { mutableStateOf<ExportStage>(ExportStage.Closed) }
+    var exportJob by remember { mutableStateOf<Job?>(null) }
 
     BackHandler { session.pause(); onBack() }
     // Nothing plays in the background; pausing also commits a running take.
@@ -112,12 +114,16 @@ fun StudioScreen(projectId: String, onBack: () -> Unit) {
             name = open.name,
             onExport = { title ->
                 export = ExportStage.Encoding
-                scope.launch {
+                exportJob = scope.launch {
                     export = session.export(title).fold(
                         { ExportStage.Saved(it) },
                         { ExportStage.Form(error = it.message ?: "Something went wrong") },
                     )
                 }
+            },
+            onCancelExport = {
+                exportJob?.cancel()
+                export = ExportStage.Form()
             },
             onSetRingtone = { saved ->
                 // Said in the dialog: a snackbar would sit behind it, or fade while Settings is open.
@@ -274,9 +280,9 @@ private fun StudioScroll(s: StudioState.Open, controls: StudioControls, actions:
             )
         }
         Text(
-            "DRAG TO SELECT · PINCH TO ZOOM",
+            "DRAG TO SELECT · TAP TO MOVE\nTWO FINGERS TO SCROLL AND ZOOM",
             style = MaterialTheme.typography.labelSmall,
-            color = Muted.copy(alpha = 0.6f),
+            color = Muted,
             modifier = Modifier.padding(top = 10.dp, start = 4.dp, bottom = 24.dp),
         )
         if (editing) EditPanel(actions, controls) else ComposePanel(actions, controls)
@@ -376,13 +382,15 @@ private fun ExportDialog(
     name: String,
     onExport: (title: String) -> Unit,
     onSetRingtone: (ExportStage.Saved) -> Unit,
+    /** Stops encoding and goes back to the form; also what Back does while encoding. */
+    onCancelExport: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     var title by remember { mutableStateOf(name) }
     val encoding = stage == ExportStage.Encoding
 
     AlertDialog(
-        onDismissRequest = { if (!encoding) onDismiss() },
+        onDismissRequest = { if (encoding) onCancelExport() else onDismiss() },
         containerColor = Surface1,
         shape = RoundedCornerShape(28.dp),
         title = { Text(if (stage is ExportStage.Saved) "Saved" else "Export ringtone", style = MaterialTheme.typography.headlineMedium) },
@@ -439,11 +447,16 @@ private fun ExportDialog(
                     if (stage is ExportStage.Form && stage.error != null) "Try again" else "Export",
                     { onExport(title.trim().ifEmpty { name }) },
                     height = 48.dp,
+                    // A cancelled encode takes a moment to stop.
+                    enabled = phase !is Phase.Exporting,
                 )
             }
         },
         dismissButton = {
-            if (!encoding) PillButton(if (stage is ExportStage.Saved) "Done" else "Cancel", onDismiss, style = PillStyle.GREY, height = 48.dp)
+            when {
+                encoding -> PillButton("Cancel", onCancelExport, style = PillStyle.GREY, height = 48.dp)
+                else -> PillButton(if (stage is ExportStage.Saved) "Done" else "Cancel", onDismiss, style = PillStyle.GREY, height = 48.dp)
+            }
         },
     )
 }
