@@ -1,26 +1,18 @@
 package com.mauray.glyp.glyph
 
-import android.content.ComponentName
-import android.content.Context
-import android.database.ContentObserver
-import android.os.Handler
-import android.os.Looper
-import android.provider.Settings
-import android.util.Log
-import com.nothing.ketchum.Common
-import com.nothing.ketchum.Glyph
-import com.nothing.ketchum.GlyphException
-import com.nothing.ketchum.GlyphManager
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
 /**
- * Thin wrapper around Nothing's GlyphManager that drives all 36 zones of the Phone (3a)
- * with per-zone brightness. On any other device every call is a no-op, so the rest of
- * the app (editor, export) still works and only the live preview on the back is missing.
+ * Drives all 36 zones of the Phone (3a) with per-zone brightness through Nothing's Glyph SDK
+ * ([GlyphPlatform]). On any other device every call is a no-op, so the rest of the app
+ * (editor, export) still works and only the live preview on the back is missing.
  */
-class GlyphController(context: Context) {
+class GlyphController(private val platform: GlyphPlatform) {
+
+    // Spelled out so this file stays free of Android imports; only the adapter needs them.
+    constructor(context: android.content.Context) : this(AndroidGlyphPlatform(context))
 
     /**
      * [SWITCHED_OFF]: connected, but Nothing OS has the Glyph Interface off (its toggle or
@@ -29,10 +21,8 @@ class GlyphController(context: Context) {
      */
     enum class State { UNSUPPORTED, CONNECTING, READY, SWITCHED_OFF, SCREEN_UP, FAILED }
 
-    private val appContext = context.applicationContext
-
     /** The connection's own state; [state] also says when the system switch is off. */
-    private var connection = if (Common.is24111()) State.CONNECTING else State.UNSUPPORTED
+    private var connection = if (platform.supported) State.CONNECTING else State.UNSUPPORTED
         set(value) {
             field = value
             publish()
@@ -56,7 +46,7 @@ class GlyphController(context: Context) {
     // Bound once, the first time the app comes to the foreground, and kept for the life of
     // the process: binding and unbinding on every trip to the background gave a lost bind
     // many chances to leave the app stuck. Only the session follows the app's visibility.
-    private var manager: GlyphManager? = null
+    private var bound = false
     private var registered = false
     private var visible = false
     private val buffer = IntArray(GlyphZones.COUNT)
@@ -64,137 +54,109 @@ class GlyphController(context: Context) {
     // The SDK never rebinds on its own: if the binding dies, or a bind never connects, the
     // app would stay CONNECTING with the lights dark. So while visible and not registered,
     // bind again, backing off.
-    private val main = Handler(Looper.getMainLooper())
     private var retries = 0
-    private val reconnect: Runnable = Runnable {
-        val gm = manager ?: return@Runnable
-        if (registered || !visible) return@Runnable
-        Log.i(TAG, "Glyph service not connected; binding again")
-        gm.unInit()
-        gm.init(callback)
+
+    private fun reconnect() {
+        if (!bound) return
+        if (registered || !visible) return
+        platform.log("Glyph service not connected; binding again")
+        platform.unbind()
+        bind()
         scheduleReconnect()
     }
 
+    private fun bind() = platform.bind(::onServiceConnected, ::onServiceDisconnected)
+
     // Watched while visible, so the status follows the Glyphs tile, the schedule and the
     // phone being laid screen-up as they change.
-    private val systemSwitch = object : ContentObserver(main) {
-        override fun onChange(selfChange: Boolean) = readSystemSwitch()
-    }
-
     private fun readSystemSwitch() {
-        systemOn = readGlobal(SYSTEM_SWITCH)?.let { it != 0 }
-        screenUp = readGlobal(SCREEN_UPWARD)?.let { it == SCREEN_UPWARD_UP }
+        systemOn = platform.readGlobal(SYSTEM_SWITCH)?.let { it != 0 }
+        screenUp = platform.readGlobal(SCREEN_UPWARD)?.let { it == SCREEN_UPWARD_UP }
         publish()
     }
 
-    /** Not on this OS version, or not readable: null, so we say nothing rather than guess. */
-    private fun readGlobal(name: String): Int? = try {
-        Settings.Global.getInt(appContext.contentResolver, name)
-    } catch (e: Exception) {
-        null
-    }
-
     private fun scheduleReconnect() {
-        main.removeCallbacks(reconnect)
-        main.postDelayed(reconnect, minOf(RETRY_FIRST_MS shl minOf(retries++, 4), RETRY_MAX_MS))
+        platform.cancelPosted()
+        platform.postDelayed(minOf(RETRY_FIRST_MS shl minOf(retries++, 4), RETRY_MAX_MS), ::reconnect)
     }
 
-    private val callback: GlyphManager.Callback = object : GlyphManager.Callback {
-        override fun onServiceConnected(name: ComponentName) {
-            val gm = manager ?: return
-            registered = gm.register(Glyph.DEVICE_24111)
-            if (!registered) {
-                Log.w(TAG, "register() refused - is Glyph debug mode enabled?")
-                connection = State.FAILED
-                if (visible) scheduleReconnect()
-                return
-            }
-            retries = 0
-            main.removeCallbacks(reconnect)
-            if (visible) openSession(gm)
-        }
-
-        override fun onServiceDisconnected(name: ComponentName) {
-            registered = false
-            connection = State.CONNECTING
+    private fun onServiceConnected() {
+        if (!bound) return
+        registered = platform.register()
+        if (!registered) {
+            platform.log("register() refused - is Glyph debug mode enabled?")
+            connection = State.FAILED
             if (visible) scheduleReconnect()
+            return
         }
+        retries = 0
+        platform.cancelPosted()
+        if (visible) openSession()
+    }
+
+    private fun onServiceDisconnected() {
+        registered = false
+        connection = State.CONNECTING
+        if (visible) scheduleReconnect()
     }
 
     /** The app is on screen: opens a session (binding first, the first time). */
     fun enterForeground() {
         if (connection == State.UNSUPPORTED) return
         visible = true
-        appContext.contentResolver.registerContentObserver(Settings.Global.getUriFor(SYSTEM_SWITCH), false, systemSwitch)
-        appContext.contentResolver.registerContentObserver(Settings.Global.getUriFor(SCREEN_UPWARD), false, systemSwitch)
+        platform.watchGlobals(listOf(SYSTEM_SWITCH, SCREEN_UPWARD), ::readSystemSwitch)
         readSystemSwitch()
-        val gm = manager
         when {
-            gm == null -> {
-                manager = GlyphManager.getInstance(appContext).also { it.init(callback) }
+            !bound -> {
+                bound = true
+                bind()
                 retries = 0
                 scheduleReconnect() // in case this bind never connects
             }
-            registered -> openSession(gm)
+            registered -> openSession()
             else -> {
                 // Lost while we were away: try again now rather than after the back-off.
                 retries = 0
-                main.removeCallbacks(reconnect)
-                reconnect.run()
+                platform.cancelPosted()
+                reconnect()
             }
         }
     }
 
     /** The app left the screen: lights off and session closed; the binding stays. */
     fun enterBackground() {
-        if (visible) appContext.contentResolver.unregisterContentObserver(systemSwitch)
+        if (visible) platform.unwatchGlobals()
         visible = false
-        main.removeCallbacks(reconnect)
-        val gm = manager ?: return
+        platform.cancelPosted()
+        if (!bound) return
         if (connection != State.READY) return
-        try {
-            // Unbinding used to clear the lights too; staying bound, blank them explicitly.
-            gm.setFrameColors(IntArray(GlyphZones.COUNT))
-            gm.turnOff()
-            gm.closeSession()
-        } catch (e: GlyphException) {
-            Log.w(TAG, "closeSession failed", e)
-        }
+        // Unbinding used to clear the lights too; staying bound, blank them explicitly.
+        platform.setFrameColors(IntArray(GlyphZones.COUNT))
+        platform.turnOff()
+        platform.closeSession()
         // No session until the app is back; the next enterForeground opens one.
         connection = State.CONNECTING
     }
 
-    private fun openSession(gm: GlyphManager) {
-        try {
-            gm.openSession()
-            connection = State.READY
-        } catch (e: GlyphException) {
-            Log.e(TAG, "openSession failed", e)
-            connection = State.FAILED
-        }
+    private fun openSession() {
+        connection = if (platform.openSession()) State.READY else State.FAILED
     }
 
     /** Shows one frame: [GlyphZones.COUNT] stored values in 0..[GlyphZones.MAX_BRIGHTNESS]. */
     fun show(frame: ShortArray) {
-        val gm = manager ?: return
+        if (!bound) return
         if (connection != State.READY) return
         for (i in 0 until GlyphZones.COUNT) {
             buffer[i] = frame[i].toInt() * SDK_MAX_BRIGHTNESS / GlyphZones.MAX_BRIGHTNESS
         }
-        try {
-            gm.setFrameColors(buffer)
-        } catch (e: GlyphException) {
-            Log.w(TAG, "setFrameColors failed", e)
-        }
+        platform.setFrameColors(buffer)
     }
 
     fun off() {
-        if (connection == State.READY) manager?.turnOff()
+        if (bound && connection == State.READY) platform.turnOff()
     }
 
     companion object {
-        private const val TAG = "GlyphController"
-
         /**
          * Upper bound the SDK's setFrameColors() accepts. Undocumented; the system's own
          * ringtone data is 12 bit, so we assume the same range here.
