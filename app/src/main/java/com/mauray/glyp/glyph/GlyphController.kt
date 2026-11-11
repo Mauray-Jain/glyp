@@ -2,6 +2,8 @@ package com.mauray.glyp.glyph
 
 import android.content.ComponentName
 import android.content.Context
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import com.nothing.ketchum.Common
 import com.nothing.ketchum.Glyph
@@ -27,7 +29,26 @@ class GlyphController(context: Context) {
     private var manager: GlyphManager? = null
     private val buffer = IntArray(GlyphZones.COUNT)
 
-    private val callback = object : GlyphManager.Callback {
+    // The SDK never rebinds on its own: if the system Glyph service drops the connection (it
+    // restarts, or the binding dies) the app would stay CONNECTING and the lights dark. So
+    // while started and not connected, bind again, backing off.
+    private val main = Handler(Looper.getMainLooper())
+    private var retries = 0
+    private val reconnect: Runnable = Runnable {
+        val gm = manager ?: return@Runnable
+        if (_state.value == State.READY) return@Runnable
+        Log.i(TAG, "Glyph service not connected; binding again")
+        gm.unInit()
+        gm.init(callback)
+        scheduleReconnect()
+    }
+
+    private fun scheduleReconnect() {
+        main.removeCallbacks(reconnect)
+        main.postDelayed(reconnect, minOf(RETRY_FIRST_MS shl minOf(retries++, 4), RETRY_MAX_MS))
+    }
+
+    private val callback: GlyphManager.Callback = object : GlyphManager.Callback {
         override fun onServiceConnected(name: ComponentName) {
             val gm = manager ?: return
             if (!gm.register(Glyph.DEVICE_24111)) {
@@ -38,6 +59,8 @@ class GlyphController(context: Context) {
             try {
                 gm.openSession()
                 _state.value = State.READY
+                retries = 0
+                main.removeCallbacks(reconnect)
             } catch (e: GlyphException) {
                 Log.e(TAG, "openSession failed", e)
                 _state.value = State.FAILED
@@ -45,16 +68,21 @@ class GlyphController(context: Context) {
         }
 
         override fun onServiceDisconnected(name: ComponentName) {
+            if (manager == null) return // we let go of it ourselves
             _state.value = State.CONNECTING
+            scheduleReconnect()
         }
     }
 
     fun start() {
         if (_state.value == State.UNSUPPORTED || manager != null) return
         manager = GlyphManager.getInstance(appContext).also { it.init(callback) }
+        retries = 0
+        scheduleReconnect() // in case this bind never connects
     }
 
     fun stop() {
+        main.removeCallbacks(reconnect)
         val gm = manager ?: return
         try {
             gm.turnOff()
@@ -93,5 +121,8 @@ class GlyphController(context: Context) {
          * ringtone data is 12 bit, so we assume the same range here.
          */
         const val SDK_MAX_BRIGHTNESS = 4095
+
+        private const val RETRY_FIRST_MS = 2_000L
+        private const val RETRY_MAX_MS = 15_000L
     }
 }

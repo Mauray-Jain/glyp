@@ -96,6 +96,10 @@ fun StudioScreen(projectId: String, onBack: () -> Unit) {
     // Nothing plays in the background; pausing also commits a running take.
     LifecycleEventEffect(Lifecycle.Event.ON_STOP) { session.pause() }
     LaunchedEffect(session) { session.messages.collect { snackbar.showSnackbar(it) } }
+    // Record with Replace shows only the pads, playing or recording: what the take will keep.
+    LaunchedEffect(vm.controls.mode, vm.controls.overdub) {
+        session.muteTrack(vm.controls.mode == StudioMode.RECORD && !vm.controls.overdub)
+    }
 
     StudioLayout(
         s = s,

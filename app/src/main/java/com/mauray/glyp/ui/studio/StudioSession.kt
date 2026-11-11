@@ -107,6 +107,9 @@ class StudioSession(
     private var opened: Opened? = null
     private var exporting: Phase.Exporting? = null
 
+    /** Kept here too, since it can be set before the project has loaded. */
+    private var trackMuted = false
+
     /** The slider-driven paint in progress; every other action commits it first. */
     private var livePaint: LightDocument.Transaction? = null
 
@@ -141,7 +144,7 @@ class StudioSession(
                 p.meta
             }
             val document = LightDocument(p.lights)
-            val recorder = TakeRecorder(document, openClock(p.audioFile), scope, showLights)
+            val recorder = TakeRecorder(document, openClock(p.audioFile), scope, showLights).also { it.trackMuted = trackMuted }
             val o = Opened(meta, p.audioFile, song, document, recorder)
             opened = o
             scope.launch { recorder.live.collect { publish(o) } }
@@ -205,6 +208,11 @@ class StudioSession(
             Phase.Recording -> o.recorder.pause()
             else -> Unit
         }
+    }
+
+    override fun muteTrack(muted: Boolean) {
+        trackMuted = muted
+        opened?.recorder?.trackMuted = muted
     }
 
     override fun pressPad(pad: Pad, level: Float) {

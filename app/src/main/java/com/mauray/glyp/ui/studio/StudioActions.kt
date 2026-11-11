@@ -41,4 +41,7 @@ interface StudioActions {
 
     /** Starts a take from the playhead (layering over the lights with [overdub]) or stops it. */
     fun toggleRecord(overdub: Boolean)
+
+    /** Hides the track's own lights so only the pads show (Record with Replace). */
+    fun muteTrack(muted: Boolean)
 }

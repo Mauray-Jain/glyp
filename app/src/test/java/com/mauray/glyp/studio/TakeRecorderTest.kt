@@ -89,6 +89,22 @@ class TakeRecorderTest {
     }
 
     @Test
+    fun `a muted track shows only the pads, and comes back when unmuted`() = runTest {
+        val r = rig { track -> for (f in 0 until 600) track[f, topZone] = 1000 }
+        r.recorder.trackMuted = true
+        r.recorder.play()
+        advance(500)
+        assertEquals("track hidden", 0, r.shown.last()[topZone].toInt())
+        r.recorder.pressPad(Pad.RIGHT, 1f)
+        advance(100)
+        assertEquals("pads still show", GlyphZones.MAX_BRIGHTNESS, r.shown.last()[rightZone].toInt())
+        r.recorder.releasePad(Pad.RIGHT)
+        r.recorder.trackMuted = false
+        assertEquals(1000, r.shown.last()[topZone].toInt())
+        r.recorder.pause()
+    }
+
+    @Test
     fun `losing the audio to a call pauses and keeps the take`() = runTest {
         val r = rig()
         r.recorder.record(overdub = true)

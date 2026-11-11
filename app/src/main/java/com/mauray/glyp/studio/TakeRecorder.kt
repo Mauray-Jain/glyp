@@ -64,6 +64,16 @@ class TakeRecorder(
         scope.launch { document.revision.collect { if (tick?.isActive != true) render() } }
     }
 
+    /**
+     * Shows only the pads, not the track: in Record with Replace that is what a take keeps, so
+     * the original lights would only get in the way of hearing what you play.
+     */
+    var trackMuted = false
+        set(value) {
+            field = value
+            render()
+        }
+
     /** Plays from the playhead, rewinding first if it is at the end. */
     fun play() {
         if (clock.playing) return
@@ -182,7 +192,7 @@ class TakeRecorder(
 
     private fun render() {
         performance.levelsAt(nowFrame(), levels)
-        document.copyFrame(playhead, frame)
+        if (trackMuted) frame.fill(0) else document.copyFrame(playhead, frame)
         val lights = IntArray(GlyphZones.COUNT) { z ->
             max(frame[z].toInt(), LightShapes.stored(levels[z])).also { frame[z] = it.toShort() }
         }

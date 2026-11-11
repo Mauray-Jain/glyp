@@ -157,5 +157,6 @@ class ScreenshotTest {
         override fun pressPad(pad: Pad, level: Float) {}
         override fun releasePad(pad: Pad) {}
         override fun toggleRecord(overdub: Boolean) {}
+        override fun muteTrack(muted: Boolean) {}
     }
 }
