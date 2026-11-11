@@ -159,6 +159,21 @@ class ProjectStoreTest {
         assertFalse(staleTmp.exists())
     }
 
+    @Test
+    fun `a project created with lights starts with them, fitted to the song, and isn't composed`() = runTest {
+        val lights = LightTrack(200).apply { this[0, 0] = 4095; this[59, 35] = 1234; this[150, 3] = 9 }
+        val p = store().create("ring.ogg", 1_000, autoCompose = true, lights = lights) { "x".byteInputStream() }
+        val loaded = store().load(p.meta.id)
+        assertFalse(loaded.meta.pendingAutoCompose)
+        assertEquals("trimmed to the song's 60 frames", 60, loaded.lights.frameCount)
+        assertEquals(4095, loaded.lights[0, 0])
+        assertEquals(1234, loaded.lights[59, 35])
+        val short = store().create("short.ogg", 1_000, autoCompose = false, lights = LightTrack(10).apply { this[9, 1] = 5 }) { "x".byteInputStream() }
+        assertEquals("padded with dark frames", 60, short.lights.frameCount)
+        assertEquals(5, short.lights[9, 1])
+        assertEquals(0, short.lights[30, 1])
+    }
+
     private companion object {
         const val HOUR = 60 * 60_000L
     }
