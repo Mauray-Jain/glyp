@@ -32,14 +32,15 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    // The Glyph SDK only serves foreground apps, so hold the session while visible.
+    // The Glyph SDK only serves foreground apps: a session is open only while visible (the
+    // connection to the service itself stays up for the life of the process).
     override fun onStart() {
         super.onStart()
-        glyph.start()
+        glyph.enterForeground()
     }
 
     override fun onStop() {
-        glyph.stop()
+        glyph.enterBackground()
         super.onStop()
     }
 }
