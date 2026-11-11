@@ -44,6 +44,22 @@ adb shell settings put global nt_glyph_interface_debug_enable 1
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
+## Device check
+
+With a Phone (3a) unlocked and connected over USB, plus `adb` and `ffmpeg` on the computer, one
+command checks the app end to end:
+
+```bash
+./gradlew assembleDebug && scripts/device-smoke.sh
+```
+
+It installs the APK, imports a generated 10-second song (Auto compose), checks the Glyph status
+and that frames reach Nothing's Glyph service while playing, goes Home and back (no second bind,
+lights recover), exports a ringtone and checks its Glyph tags, and looks for crashes. It ends with
+`ALL CHECKS PASSED` and removes its test project, song and ringtone (`--keep` leaves them;
+`--apk <path>` tests another build). It never changes phone settings: if the Glyphs are switched
+off or the phone lies screen-up it warns instead of failing.
+
 ## Layout
 
 | Package | What |
