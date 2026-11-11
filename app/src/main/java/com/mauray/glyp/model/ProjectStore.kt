@@ -79,10 +79,20 @@ class ProjectStore(
     /** Writes [meta] (stamped with the current time) and [lights], which must be a snapshot. */
     suspend fun save(meta: ProjectMeta, lights: LightTrack): ProjectMeta = withContext(io) {
         val dir = File(root, meta.id)
-        val stamped = meta.copy(updatedAt = now())
         writeAtomically(File(dir, LIGHTS)) { out -> DataOutputStream(out.buffered()).also(lights::writeTo).flush() }
-        writeAtomically(File(dir, META)) { out -> out.write(json.encodeToString(ProjectMeta.serializer(), stamped).toByteArray()) }
-        stamped
+        writeMeta(meta)
+    }
+
+    /** Renames project [id], leaving its lights and audio alone. */
+    suspend fun rename(id: String, name: String): ProjectMeta = withContext(io) {
+        writeMeta(readMeta(File(root, id)).copy(name = name))
+    }
+
+    /** Writes [meta] stamped with the current time, and returns what was written. */
+    private fun writeMeta(meta: ProjectMeta): ProjectMeta {
+        val stamped = meta.copy(updatedAt = now())
+        writeAtomically(File(File(root, meta.id), META)) { out -> out.write(json.encodeToString(ProjectMeta.serializer(), stamped).toByteArray()) }
+        return stamped
     }
 
     suspend fun delete(id: String) = withContext(io) {

@@ -44,6 +44,21 @@ class ProjectStoreTest {
     }
 
     @Test
+    fun `rename keeps the lights and audio`() = runTest {
+        val s = store()
+        val p = s.create("a.ogg", 1_000, autoCompose = false) { "x".byteInputStream() }
+        s.save(p.meta, p.lights.copy().apply { this[5, 7] = 1234 })
+        clock = 3_000
+        val renamed = s.rename(p.meta.id, "Morning alarm")
+        assertEquals("Morning alarm", renamed.name)
+        assertEquals(3_000, renamed.updatedAt)
+        val loaded = s.load(p.meta.id)
+        assertEquals("Morning alarm", loaded.meta.name)
+        assertEquals(1234, loaded.lights[5, 7])
+        assertEquals("x", loaded.audioFile.readText())
+    }
+
+    @Test
     fun `saves leave no temp files behind`() = runTest {
         val s = store()
         val p = s.create("a.ogg", 1_000, autoCompose = false) { "x".byteInputStream() }

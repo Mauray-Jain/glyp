@@ -22,6 +22,7 @@ import com.mauray.glyp.model.ProjectMeta
 import com.mauray.glyp.studio.EditTool
 import com.mauray.glyp.studio.Pad
 import com.mauray.glyp.ui.home.HomeLayout
+import com.mauray.glyp.ui.home.HomeListActions
 import com.mauray.glyp.ui.home.StartChoice
 import com.mauray.glyp.ui.studio.PaintRequest
 import com.mauray.glyp.ui.studio.Phase
@@ -44,20 +45,20 @@ class ScreenshotTest {
     @get:Rule
     val paparazzi = Paparazzi(deviceConfig = DeviceConfig.PIXEL_6, showSystemUi = false, useDeviceResolution = true)
 
-    @Test
-    fun home() = snap {
-        HomeLayout(
-            projects = listOf(
-                ProjectMeta("1", "Midnight Drive", "a.mp3", 214_000, 0, 1_761_900_000_000),
-                ProjectMeta("2", "Lo-fi ringtone", "b.mp3", 12_000, 0, 1_761_800_000_000),
-                ProjectMeta("3", "Drum & bass test", "c.ogg", 31_000, 0, 1_761_700_000_000),
-            ),
-            busy = false, onNew = {}, onOpen = {}, onDelete = {},
-        )
-    }
+    private val demoProjects = listOf(
+        ProjectMeta("1", "Midnight Drive", "a.mp3", 214_000, 0, 1_761_900_000_000),
+        ProjectMeta("2", "Lo-fi ringtone", "b.mp3", 12_000, 0, 1_761_800_000_000),
+        ProjectMeta("3", "Drum & bass test", "c.ogg", 31_000, 0, 1_761_700_000_000),
+    )
 
     @Test
-    fun homeEmpty() = snap { HomeLayout(projects = emptyList(), busy = false, onNew = {}, onOpen = {}, onDelete = {}) }
+    fun home() = snap { HomeLayout(demoProjects, busy = false, emptySet(), SnackbarHostState(), HomeListActions()) }
+
+    @Test
+    fun homeSelecting() = snap { HomeLayout(demoProjects, busy = false, setOf("1", "3"), SnackbarHostState(), HomeListActions()) }
+
+    @Test
+    fun homeEmpty() = snap { HomeLayout(emptyList(), busy = false, emptySet(), SnackbarHostState(), HomeListActions()) }
 
     @Test
     fun studioAuto() = studio(tab = 0, tall = false)
