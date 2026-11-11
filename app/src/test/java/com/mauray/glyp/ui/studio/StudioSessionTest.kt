@@ -9,6 +9,7 @@ import com.mauray.glyp.glyph.GlyphZones
 import com.mauray.glyp.model.ProjectStore
 import com.mauray.glyp.studio.EditTool
 import com.mauray.glyp.studio.FakeClock
+import com.mauray.glyp.studio.LightShapes
 import com.mauray.glyp.studio.Pad
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -164,6 +165,62 @@ class StudioSessionTest {
         testScheduler.runCurrent()
         assertEquals(GlyphZones.MAX_BRIGHTNESS, r.open.track[5, rightZone])
         assertTrue(r.open.canUndo)
+    }
+
+    @Test
+    fun `a slider drag repaints the selection live as one undo step`() = runTest {
+        val r = rig()
+        r.session.paint(fill(0..10))
+        testScheduler.runCurrent()
+        for (level in listOf(0.2f, 0.6f, 0.4f)) {
+            r.session.paintLive(fill(0..10).copy(brightness = level))
+            testScheduler.runCurrent()
+            assertEquals(LightShapes.stored(level), r.open.track[5, rightZone])
+        }
+        r.session.endLivePaint()
+        testScheduler.runCurrent()
+        r.session.undo()
+        testScheduler.runCurrent()
+        assertEquals("one undo goes back to before the drag", GlyphZones.MAX_BRIGHTNESS, r.open.track[5, rightZone])
+    }
+
+    @Test
+    fun `a slider drag brings the playhead into the selection so the Glyphs show it`() = runTest {
+        val r = rig()
+        r.session.paintLive(PaintRequest(EditTool.FADE_IN, 100..200, setOf(rightZone), 0.5f, 2f))
+        testScheduler.runCurrent()
+        assertEquals("the brightest frame of a fade in is its end", 200, r.open.playhead)
+        assertEquals(LightShapes.stored(0.5f), r.open.lights[rightZone])
+        r.session.endLivePaint()
+        r.session.seek(150)
+        r.session.paintLive(PaintRequest(EditTool.FADE_IN, 100..200, setOf(rightZone), 0.8f, 2f))
+        testScheduler.runCurrent()
+        assertEquals("a playhead already inside stays put", 150, r.open.playhead)
+    }
+
+    @Test
+    fun `a slider drag without a range or lights only sets the level`() = runTest {
+        val r = rig()
+        r.session.paintLive(PaintRequest(EditTool.FILL, null, setOf(rightZone), 0.5f, 2f))
+        r.session.paintLive(PaintRequest(EditTool.FILL, 0..10, emptySet(), 0.5f, 2f))
+        r.session.endLivePaint()
+        testScheduler.runCurrent()
+        assertTrue("no nagging while dragging", r.messages.isEmpty())
+        assertFalse(r.open.canUndo)
+    }
+
+    @Test
+    fun `recording during a slider drag commits the live paint first`() = runTest {
+        val r = rig()
+        r.session.paintLive(fill(0..10).copy(brightness = 0.5f))
+        r.session.toggleRecord(overdub = true)
+        advance(100)
+        assertEquals(Phase.Recording, r.open.phase)
+        r.session.paintLive(fill(0..10))
+        r.session.endLivePaint()
+        r.session.togglePlay()
+        testScheduler.runCurrent()
+        assertEquals("ignored while recording", LightShapes.stored(0.5f), r.open.track[5, rightZone])
     }
 
     @Test

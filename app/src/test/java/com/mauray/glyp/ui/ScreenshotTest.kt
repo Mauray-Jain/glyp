@@ -149,6 +149,8 @@ class ScreenshotTest {
         override fun seek(frame: Int) {}
         override fun compose(params: ComposerParams, range: IntRange?) {}
         override fun paint(request: PaintRequest) {}
+        override fun paintLive(request: PaintRequest) {}
+        override fun endLivePaint() {}
         override fun undo() {}
         override fun redo() {}
         override fun pressPad(pad: Pad, level: Float) {}

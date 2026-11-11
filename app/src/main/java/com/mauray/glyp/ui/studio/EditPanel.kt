@@ -63,9 +63,18 @@ internal fun EditPanel(actions: StudioActions, controls: StudioControls) {
 
     Spacer(Modifier.height(20.dp))
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        PillSlider("Brightness", controls.brightness, 0.05f..1f, "${(controls.brightness * 100).toInt()}%", { controls.brightness = it })
+        // With a range and lights picked, dragging repaints the selection live.
+        PillSlider(
+            "Brightness", controls.brightness, 0.05f..1f, "${(controls.brightness * 100).toInt()}%",
+            { controls.brightness = it; actions.paintLive(controls.paint()) },
+            onChangeFinished = actions::endLivePaint,
+        )
         if (controls.tool == EditTool.PULSE) {
-            PillSlider("Speed", controls.pulseRate, 0.5f..8f, "%.1f/S".format(controls.pulseRate), { controls.pulseRate = it })
+            PillSlider(
+                "Speed", controls.pulseRate, 0.5f..8f, "%.1f/S".format(controls.pulseRate),
+                { controls.pulseRate = it; actions.paintLive(controls.paint()) },
+                onChangeFinished = actions::endLivePaint,
+            )
         }
     }
 

@@ -172,9 +172,12 @@ fun PillSlider(
     valueText: String,
     onChange: (Float) -> Unit,
     modifier: Modifier = Modifier,
+    /** Called once a tap or drag has set its last value. */
+    onChangeFinished: () -> Unit = {},
 ) {
     val fraction = ((value - range.start) / (range.endInclusive - range.start)).coerceIn(0f, 1f)
     val latestOnChange = rememberUpdatedState(onChange)
+    val latestOnFinished = rememberUpdatedState(onChangeFinished)
     BoxWithConstraints(
         modifier
             .fillMaxWidth()
@@ -186,10 +189,13 @@ fun PillSlider(
                     val f = (x / size.width).coerceIn(0f, 1f)
                     latestOnChange.value(range.start + f * (range.endInclusive - range.start))
                 }
-                detectTapGestures { set(it.x) }
+                detectTapGestures { set(it.x); latestOnFinished.value() }
             }
             .pointerInput(range) {
-                detectHorizontalDragGestures { change, _ ->
+                detectHorizontalDragGestures(
+                    onDragEnd = { latestOnFinished.value() },
+                    onDragCancel = { latestOnFinished.value() },
+                ) { change, _ ->
                     val f = (change.position.x / size.width).coerceIn(0f, 1f)
                     latestOnChange.value(range.start + f * (range.endInclusive - range.start))
                 }

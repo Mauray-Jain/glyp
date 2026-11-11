@@ -107,6 +107,9 @@ class StudioSession(
     private var opened: Opened? = null
     private var exporting: Phase.Exporting? = null
 
+    /** The slider-driven paint in progress; every other action commits it first. */
+    private var livePaint: LightDocument.Transaction? = null
+
     /** Read from the sources, not from [state], which a collector updates a moment later. */
     private val phase: Phase? get() = opened?.let(::phaseOf)
 
@@ -173,6 +176,7 @@ class StudioSession(
 
     override fun togglePlay() {
         val o = opened ?: return
+        endLivePaint()
         when (phase) {
             Phase.Idle -> o.recorder.play()
             Phase.Playing, Phase.Recording -> o.recorder.pause()
@@ -182,6 +186,7 @@ class StudioSession(
 
     /** Pauses playback and commits a running take; used when leaving or backgrounding. */
     fun pause() {
+        endLivePaint()
         opened?.recorder?.pause()
     }
 
@@ -191,6 +196,7 @@ class StudioSession(
 
     override fun toggleRecord(overdub: Boolean) {
         val o = opened ?: return
+        endLivePaint()
         when (phase) {
             Phase.Idle, Phase.Playing -> o.recorder.record(overdub)
             Phase.Recording -> o.recorder.pause()
@@ -224,13 +230,34 @@ class StudioSession(
         when {
             frames == null -> notify("Drag across the timeline to pick a time range")
             request.zones.isEmpty() -> notify("Tap the lights or pick a strip first")
-            else -> {
-                // Sweeps travel in strip order C → A → B, each strip in its own zone order.
-                val zones = GlyphZones.stripOrder.flatMap { strip -> strip.zones.filter { it in request.zones } }
-                o.document.edit { EditOps.apply(it, request.tool, frames, zones, request.brightness, request.pulseRate) }
-            }
+            else -> o.document.edit { EditOps.apply(it, request.tool, frames, sweepOrder(request.zones), request.brightness, request.pulseRate) }
         }
     }
+
+    override fun paintLive(request: PaintRequest) {
+        val frames = request.frames ?: return
+        if (request.zones.isEmpty()) return
+        val o = opened?.takeIf { phase?.canEdit == true } ?: return
+        val tx = livePaint ?: o.document.begin().also { livePaint = it }
+        var brightest = frames.first
+        // Every tool writes every frame and zone it covers, so this replaces the last live paint.
+        tx.update { track ->
+            EditOps.apply(track, request.tool, frames, sweepOrder(request.zones), request.brightness, request.pulseRate)
+            brightest = frames.maxBy { f -> request.zones.sumOf { track[f, it] } }
+        }
+        // The Glyphs show the playhead, so bring it into the selection to make the drag visible.
+        if (phase == Phase.Idle && o.recorder.live.value.playhead !in frames) o.recorder.seek(brightest)
+        tx.publish()
+    }
+
+    override fun endLivePaint() {
+        livePaint?.commit()
+        livePaint = null
+    }
+
+    /** Sweeps travel in strip order C → A → B, each strip in its own zone order. */
+    private fun sweepOrder(zones: Set<Int>): List<Int> =
+        GlyphZones.stripOrder.flatMap { strip -> strip.zones.filter { it in zones } }
 
     override fun undo() {
         editable()?.document?.undo()
@@ -240,7 +267,8 @@ class StudioSession(
         editable()?.document?.redo()
     }
 
-    private fun editable(): Opened? = opened?.takeIf { phase?.canEdit == true }
+    /** The open project if editing is allowed now, with any live paint committed first. */
+    private fun editable(): Opened? = opened?.takeIf { phase?.canEdit == true }?.also { endLivePaint() }
 
     // endregion
 
@@ -295,6 +323,7 @@ class StudioSession(
     /** Commits any take and blocks for a last save; for when the scope is already gone. */
     fun close() {
         val o = opened ?: return
+        endLivePaint()
         o.recorder.close()
         if (o.document.dirty) runBlocking { save(o) }
     }

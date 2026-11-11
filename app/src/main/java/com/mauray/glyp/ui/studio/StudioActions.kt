@@ -24,6 +24,14 @@ interface StudioActions {
     /** Regenerates [range] (or the whole song when null) in the given style. */
     fun compose(params: ComposerParams, range: IntRange?)
     fun paint(request: PaintRequest)
+
+    /**
+     * Repaints [request] over the selection while a slider is dragged, replacing the previous
+     * live paint; does nothing until a range and lights are picked. [endLivePaint] makes it
+     * one undo step.
+     */
+    fun paintLive(request: PaintRequest)
+    fun endLivePaint()
     fun undo()
     fun redo()
 
