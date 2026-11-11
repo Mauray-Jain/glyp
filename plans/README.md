@@ -14,7 +14,7 @@ Plans are numbered by finding; the **recommended execution order** is the order 
 | 2 | [002](002-ci-tests-and-screenshots.md) | CI runs tests, screenshots, lint, build | P1 | S | 001 (soft) | DONE |
 | 3 | [004](004-safe-ringtone-replace.md) | Re-export never leaves a broken ringtone | P1 | S | — | DONE |
 | 4 | [005](005-test-undoable-deletes.md) | Undoable deletes are unit-tested | P1 | S | — | DONE |
-| 5 | [014](014-device-smoke-script.md) | One-command device check | P2 | S–M | — | TODO |
+| 5 | [014](014-device-smoke-script.md) | One-command device check | P2 | S–M | — | DONE (device run pending) |
 | 6 | [003](003-test-glyph-controller.md) | GlyphController logic is unit-tested | P1 | M | — (014 helps verify) | TODO |
 | 7 | [007](007-clean-up-failed-writes.md) | Failed writes/imports leave nothing behind | P2 | S | — | TODO |
 | 8 | [006](006-backup-rules.md) | Cloud backup within quota; D2D keeps projects | P2 | S | — | TODO |
