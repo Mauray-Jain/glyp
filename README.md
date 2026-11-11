@@ -13,8 +13,10 @@ Light compositions and Glyph ringtones for the Nothing Phone (3a) / (3a) Pro.
 
 ## Build
 
-Needs JDK 17 and an Android SDK with platform 37 and build-tools 37.0.0 (point
-`local.properties` at it with `sdk.dir=...`).
+Needs an Android SDK with platform 37 and build-tools 37.0.0 (point `local.properties` at it with
+`sdk.dir=...`). Gradle runs itself on JDK 17 (see `gradle/gradle-daemon-jvm.properties`) and
+downloads one if none is installed; the `java` on your `PATH` only needs to be able to start
+the Gradle wrapper.
 
 Nothing's Glyph SDK isn't redistributed in this repo; fetch it once from Nothing's
 [Glyph Developer Kit](https://github.com/Nothing-Developer-Programme/Glyph-Developer-Kit):
