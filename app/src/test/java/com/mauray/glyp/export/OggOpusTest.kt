@@ -79,4 +79,28 @@ class OggOpusTest {
     fun `rejects other files`() {
         OggOpus.retag(ByteArray(100), emptyList())
     }
+
+    @Test
+    fun `readTags reads back what retag wrote, keys upper-cased`() {
+        val (input, _) = OggTestFiles.sampleOpus()
+        val tags = OggOpus.readTags(OggOpus.retag(input, listOf("title" to "Ring", "CUSTOM2" to "36cols", "X" to "a=b")))
+        assertEquals(mapOf("TITLE" to "Ring", "CUSTOM2" to "36cols", "X" to "a=b"), tags)
+    }
+
+    @Test
+    fun `readTags reads a tag packet over 64 KB spanning pages`() {
+        val rnd = Random(1)
+        val big = String(CharArray(200_000) { 'a' + rnd.nextInt(26) })
+        val (input, _) = OggTestFiles.sampleOpus()
+        assertEquals(big, OggOpus.readTags(OggOpus.retag(input, listOf("AUTHOR" to big)))["AUTHOR"])
+    }
+
+    @Test
+    fun `readTags of something that isn't Ogg Opus is empty`() {
+        assertEquals(emptyMap<String, String>(), OggOpus.readTags(Random(3).nextBytes(4_000)))
+        assertEquals(emptyMap<String, String>(), OggOpus.readTags(ByteArray(0)))
+        // Starts like Ogg Opus but is cut off inside the first page.
+        val (input, _) = OggTestFiles.sampleOpus()
+        assertEquals(emptyMap<String, String>(), OggOpus.readTags(input.copyOf(60)))
+    }
 }

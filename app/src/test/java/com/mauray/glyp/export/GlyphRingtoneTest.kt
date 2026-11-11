@@ -5,6 +5,7 @@ import com.mauray.glyp.model.LightTrack
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import org.junit.Assert.assertNull
 import org.junit.Test
 import java.util.Base64
 import java.util.zip.Inflater
@@ -62,5 +63,32 @@ class GlyphRingtoneTest {
         val comments = OggTestFiles.readComments(OggTestFiles.packets(pages)[1])
         assertEquals(listOf("TITLE", "ALBUM", "AUTHOR", "COMPOSER", "CUSTOM1", "CUSTOM2"), comments.map { it.substringBefore('=') })
         assertEquals(audio.size, pages.size - 2)
+    }
+
+    @Test
+    fun `decoding the tags gives back the lights frame by frame`() {
+        val lights = LightTrack(90).apply {
+            for (f in 0 until 90) for (z in 0 until GlyphZones.COUNT) this[f, z] = (f * 37 + z * 113) % 4096
+        }
+        val decoded = GlyphRingtone.decodeLights(GlyphRingtone.tags("Ring", lights, durationMs = 1_500).toMap())!!
+        assertEquals(90, decoded.frameCount)
+        for (f in 0 until 90) for (z in 0 until GlyphZones.COUNT) assertEquals("frame $f zone $z", lights[f, z], decoded[f, z])
+    }
+
+    @Test
+    fun `lights for another phone's column count are refused`() {
+        val fifteen = ("4095," + "0,".repeat(14) + "\r\n").repeat(10).toByteArray()
+        assertNull(GlyphRingtone.decodeLights(mapOf("AUTHOR" to GlyphRingtone.encode(fifteen))))
+    }
+
+    @Test
+    fun `undecodable light data is refused`() {
+        assertNull(GlyphRingtone.decodeLights(mapOf("AUTHOR" to "!!! not base64 !!!")))
+        assertNull(GlyphRingtone.decodeLights(mapOf("AUTHOR" to "aGVsbG8gd29ybGQ")))
+    }
+
+    @Test
+    fun `a ringtone without light data has none`() {
+        assertNull(GlyphRingtone.decodeLights(mapOf("TITLE" to "Plain song")))
     }
 }
