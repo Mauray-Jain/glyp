@@ -1,5 +1,7 @@
 # Glyp
 
+[![CI](https://github.com/Mauray-Jain/glyp/actions/workflows/ci.yml/badge.svg)](https://github.com/Mauray-Jain/glyp/actions/workflows/ci.yml)
+
 Light compositions and Glyph ringtones for the Nothing Phone (3a) / (3a) Pro.
 
 - **Auto compose**: pick a song; it is analysed (FFT bands + onset detection) and the lights are

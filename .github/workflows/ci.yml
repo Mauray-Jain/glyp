@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: android-actions/setup-android@v3
+
+      # The SDK repository names the platform "android-37.0"; there is no plain "android-37".
+      - name: Android platform 37 and build-tools 37.0.0
+        run: sdkmanager "platforms;android-37.0" "build-tools;37.0.0"
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Fetch Nothing's Glyph SDK
+        run: ./scripts/fetch-glyph-sdk.sh
+
+      - name: Unit tests, screenshot check, lint, debug build
+        run: ./gradlew :app:testDebugUnitTest :app:verifyPaparazziDebug :app:lintDebug assembleDebug
+
+      - name: Upload reports on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reports
+          path: |
+            app/build/reports/
+            app/build/test-results/
+            app/build/paparazzi/
