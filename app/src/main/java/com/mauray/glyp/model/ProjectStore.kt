@@ -1,6 +1,7 @@
 package com.mauray.glyp.model
 
 import com.mauray.glyp.audio.Timebase
+import com.mauray.glyp.glyph.GlyphZones
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
@@ -52,12 +53,14 @@ class ProjectStore(
     /**
      * Copies the audio from [openAudio] into a new project named [fileName] (without its
      * extension), with an empty light track of matching length. With [autoCompose] the Studio
-     * fills the track on first open; otherwise it stays blank.
+     * fills the track on first open; otherwise it stays blank. Given [lights] (a Glyph ringtone's
+     * own), the project starts with those instead, fitted to the song, and nothing is composed.
      */
     suspend fun create(
         fileName: String,
         durationMs: Long,
         autoCompose: Boolean,
+        lights: LightTrack? = null,
         openAudio: () -> InputStream,
     ): Project = withContext(io) {
         val id = UUID.randomUUID().toString()
@@ -66,9 +69,15 @@ class ProjectStore(
             val audioFile = File(dir, "audio." + fileName.substringAfterLast('.', "audio"))
             writeAtomically(audioFile) { out -> openAudio().use { it.copyTo(out) } }
             val time = now()
-            val meta = ProjectMeta(id, fileName.substringBeforeLast('.'), audioFile.name, durationMs, time, time, autoCompose)
-            val lights = LightTrack(Timebase.framesFor(durationMs))
-            Project(save(meta, lights), audioFile, lights)
+            val track = LightTrack(Timebase.framesFor(durationMs))
+            if (lights != null) {
+                for (f in 0 until minOf(track.frameCount, lights.frameCount)) {
+                    for (z in 0 until GlyphZones.COUNT) track[f, z] = lights[f, z]
+                }
+            }
+            val compose = autoCompose && lights == null
+            val meta = ProjectMeta(id, fileName.substringBeforeLast('.'), audioFile.name, durationMs, time, time, compose)
+            Project(save(meta, track), audioFile, track)
         } catch (e: Exception) {
             // A failed or cancelled import would otherwise leave a half-copied song nobody can
             // see or delete. Cancellation is an Exception too, so it cleans up and propagates.

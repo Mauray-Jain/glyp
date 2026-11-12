@@ -43,6 +43,40 @@ object OggOpus {
         bytes.size > 36 && String(bytes, 0, 4, Charsets.US_ASCII) == "OggS" &&
             String(bytes, 28, 8, Charsets.US_ASCII) == "OpusHead"
 
+    /**
+     * The Vorbis comments of an Ogg Opus file, keys upper-cased, split at the first '='.
+     * Anything that isn't a readable Ogg Opus stream gives an empty map: not ours to judge.
+     */
+    fun readTags(bytes: ByteArray): Map<String, String> {
+        if (!isOggOpus(bytes)) return emptyMap()
+        val pages = runCatching { parsePages(bytes) }.getOrNull() ?: return emptyMap()
+        // The OpusTags packet starts on page 1 and ends on the first page that doesn't continue it.
+        val packet = ByteArrayOutputStream()
+        for (page in pages.drop(1)) {
+            packet.write(page.body)
+            if (!page.lastPacketContinues) break
+        }
+        return runCatching { parseOpusTags(packet.toByteArray()) }.getOrDefault(emptyMap())
+    }
+
+    private fun parseOpusTags(packet: ByteArray): Map<String, String> {
+        val buf = ByteBuffer.wrap(packet).order(ByteOrder.LITTLE_ENDIAN)
+        if (packet.size < 8 || String(packet, 0, 8, Charsets.US_ASCII) != "OpusTags") return emptyMap()
+        buf.position(8)
+        val vendorLength = buf.int
+        buf.position(buf.position() + vendorLength)
+        val count = buf.int
+        val tags = LinkedHashMap<String, String>()
+        repeat(count) {
+            val length = buf.int
+            val comment = String(packet, buf.position(), length, Charsets.UTF_8)
+            buf.position(buf.position() + length)
+            val eq = comment.indexOf('=')
+            if (eq > 0) tags[comment.substring(0, eq).uppercase()] = comment.substring(eq + 1)
+        }
+        return tags
+    }
+
     private fun buildOpusTags(tags: List<Pair<String, String>>): ByteArray {
         val vendor = "Glyp".toByteArray()
         val comments = tags.map { (k, v) -> "$k=$v".toByteArray(Charsets.UTF_8) }

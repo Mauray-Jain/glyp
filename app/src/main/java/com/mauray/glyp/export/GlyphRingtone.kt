@@ -3,9 +3,11 @@ package com.mauray.glyp.export
 import com.mauray.glyp.audio.Timebase
 import com.mauray.glyp.glyph.GlyphZones
 import com.mauray.glyp.model.LightFrames
+import com.mauray.glyp.model.LightTrack
 import java.io.ByteArrayOutputStream
 import java.util.Base64
 import java.util.zip.Deflater
+import java.util.zip.Inflater
 
 /**
  * Turns a light snapshot and Ogg Opus audio into a Glyph ringtone: the same audio with the
@@ -73,5 +75,45 @@ object GlyphRingtone {
         deflater.end()
         val b64 = Base64.getEncoder().withoutPadding().encodeToString(out.toByteArray())
         return b64.chunked(76).joinToString("\n", postfix = "\n")
+    }
+
+    /**
+     * The light data of a Glyph ringtone's [tags] (the inverse of [csv] + [encode]), or null
+     * when there is none, it doesn't decode, or it isn't for the Phone (3a)'s 36 zones (other
+     * Nothing phones use other column counts).
+     */
+    fun decodeLights(tags: Map<String, String>): LightTrack? {
+        val author = tags["AUTHOR"] ?: return null
+        val csv = runCatching { inflate(Base64.getDecoder().decode(author.filterNot(Char::isWhitespace))) }
+            .getOrNull() ?: return null
+        val rows = String(csv, Charsets.US_ASCII).split('\n')
+            .map { it.trimEnd('\r') }
+            .filter { it.isNotEmpty() }
+            .map { line -> line.split(',').filter { it.isNotEmpty() } }
+        if (rows.isEmpty() || rows.any { it.size != GlyphZones.COUNT }) return null
+        val track = LightTrack(rows.size)
+        for ((frame, values) in rows.withIndex()) {
+            for ((zone, value) in values.withIndex()) {
+                track[frame, zone] = value.toIntOrNull()?.coerceIn(0, GlyphZones.MAX_BRIGHTNESS) ?: return null
+            }
+        }
+        return track
+    }
+
+    private fun inflate(data: ByteArray): ByteArray {
+        val inflater = Inflater()
+        inflater.setInput(data)
+        val out = ByteArrayOutputStream(data.size * 4)
+        val buf = ByteArray(16 * 1024)
+        try {
+            while (!inflater.finished()) {
+                val n = inflater.inflate(buf)
+                if (n == 0 && (inflater.needsInput() || inflater.needsDictionary())) error("Truncated light data")
+                out.write(buf, 0, n)
+            }
+        } finally {
+            inflater.end()
+        }
+        return out.toByteArray()
     }
 }
