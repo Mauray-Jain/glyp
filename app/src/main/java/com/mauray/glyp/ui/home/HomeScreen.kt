@@ -334,16 +334,13 @@ private fun ProjectRow(
     onDelete: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val swipe = rememberSwipeToDismissBoxState(
-        confirmValueChange = { value ->
-            if (value == SwipeToDismissBoxValue.EndToStart) onDelete()
-            value == SwipeToDismissBoxValue.EndToStart
-        },
-    )
+    val swipe = rememberSwipeToDismissBoxState()
     SwipeToDismissBox(
         state = swipe,
         enableDismissFromStartToEnd = false,
         gesturesEnabled = !selecting,
+        // Only a swipe to the left deletes; the other direction is disabled above.
+        onDismiss = { value -> if (value == SwipeToDismissBoxValue.EndToStart) onDelete() },
         // While selecting, a sideways swipe would otherwise end as a tap and toggle the row.
         modifier = if (selecting) modifier.pointerInput(Unit) { detectHorizontalDragGestures { change, _ -> change.consume() } } else modifier,
         backgroundContent = {
