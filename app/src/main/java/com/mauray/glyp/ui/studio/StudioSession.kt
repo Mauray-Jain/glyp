@@ -286,15 +286,19 @@ class StudioSession(
     // region export
 
     /**
-     * Saves the project as a ringtone named [title] (also renaming the project). Allowed from
-     * Idle or Playing; playback stops first. On any error the failure carries the reason,
-     * for the caller to show.
+     * Saves the project as a ringtone named [title] (also renaming the project); with [range]
+     * (light frames, at least a second) only that part of the song. Allowed from Idle or
+     * Playing; playback stops first. On any error the failure carries the reason, for the
+     * caller to show.
      */
-    suspend fun export(title: String): Result<Ringtone> {
+    suspend fun export(title: String, range: IntRange? = null): Result<Ringtone> {
         val o = editable() ?: return Result.failure(IllegalStateException("Busy"))
+        if (range != null && range.count() < MIN_EXPORT_FRAMES) {
+            return Result.failure(IllegalArgumentException("Pick at least a second of the song."))
+        }
         o.recorder.pause()
         o.meta = o.meta.copy(name = title)
-        val job = ExportJob(title, o.audioFile, o.song.pcm, o.document.snapshot(), o.meta.durationMs)
+        val job = ExportJob(title, o.audioFile, o.song.pcm, o.document.snapshot(), o.meta.durationMs, range)
         setExporting(o, Phase.Exporting(0f))
         // The exporter reports progress from its own thread; publish it from ours.
         val progress = MutableStateFlow(0f)
@@ -350,5 +354,8 @@ class StudioSession(
     private companion object {
         const val AUTOSAVE_DELAY_MS = 500L
         const val TOO_LONG = "This song is too long for this phone's memory."
+
+        /** One second: a shorter ringtone is over before anyone notices it. */
+        const val MIN_EXPORT_FRAMES = GlyphZones.FPS
     }
 }

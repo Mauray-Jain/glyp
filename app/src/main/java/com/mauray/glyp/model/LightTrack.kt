@@ -41,6 +41,14 @@ class LightTrack private constructor(override val frameCount: Int, private val d
 
     fun copy() = LightTrack(frameCount, data.copyOf())
 
+    /** A new track holding just [frames] (clamped to this track), e.g. to export part of a song. */
+    fun slice(frames: IntRange): LightTrack {
+        val first = frames.first.coerceAtLeast(0)
+        val last = frames.last.coerceAtMost(frameCount - 1)
+        if (last < first) return LightTrack(0)
+        return LightTrack(last - first + 1, data.copyOfRange(first * GlyphZones.COUNT, (last + 1) * GlyphZones.COUNT))
+    }
+
     /** Frame count, then every value as a big-endian short. */
     fun writeTo(out: DataOutputStream) {
         out.writeInt(frameCount)

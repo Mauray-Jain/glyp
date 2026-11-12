@@ -18,7 +18,8 @@ Light compositions and Glyph ringtones for the Nothing Phone (3a) / (3a) Pro.
 - **Export**: writes an Ogg Opus ringtone with the light data in its tags (Nothing's ringtone
   format) to `Ringtones/Glyp`, and can set it as the default ringtone. Exporting the same name
   again replaces that ringtone in place (it stays the default if it was), and an export can be
-  cancelled while it encodes.
+  cancelled while it encodes. With a time range selected on the timeline, you can export just
+  that part (at least a second) instead of the whole song.
 
 ## Build
 
