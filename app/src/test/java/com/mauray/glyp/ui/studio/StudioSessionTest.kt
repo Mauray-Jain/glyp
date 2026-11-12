@@ -5,6 +5,7 @@ import com.mauray.glyp.audio.Song
 import com.mauray.glyp.composer.ComposerParams
 import com.mauray.glyp.export.ExportJob
 import com.mauray.glyp.export.Ringtone
+import com.mauray.glyp.export.SoundKind
 import com.mauray.glyp.glyph.GlyphZones
 import com.mauray.glyp.model.ProjectStore
 import com.mauray.glyp.studio.EditTool
@@ -61,7 +62,7 @@ class StudioSessionTest {
                 delay(100)
                 if (exportFails) error("disk full")
                 object : Ringtone {
-                    override fun setAsDefault() = true
+                    override fun setAsDefault(kind: SoundKind) = true
                 }
             },
             showLights = {},
