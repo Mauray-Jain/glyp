@@ -15,7 +15,7 @@ android {
         applicationId = "com.mauray.glyp"
         // The Glyph SDK only runs on Nothing OS with Android 14+.
         minSdk = 34
-        targetSdk = 36
+        targetSdk = 37
         versionCode = 1
         versionName = "0.1.0"
 
