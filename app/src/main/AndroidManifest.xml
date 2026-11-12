@@ -14,11 +14,12 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.Glyp">
 
-        <!-- "test" works while Glyph debug mode is enabled:
-             adb shell settings put global nt_glyph_interface_debug_enable 1 -->
+        <!-- Nothing's API key for the Glyph SDK, from the glyp.nothingKey Gradle property
+             (default "test", the development key, which works while Glyph debug mode is on:
+             adb shell settings put global nt_glyph_interface_debug_enable 1). -->
         <meta-data
             android:name="NothingKey"
-            android:value="test" />
+            android:value="${nothingKey}" />
 
         <activity
             android:name=".MainActivity"

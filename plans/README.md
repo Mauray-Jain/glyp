@@ -22,7 +22,7 @@ Plans are numbered by finding; the **recommended execution order** is the order 
 | 10 | [012](012-import-glyph-ringtones.md) | Importing a Glyph ringtone keeps its lights | P2 | M | 007 (both edit `ProjectStore.create`) | DONE (device run pending) |
 | 11 | [011](011-export-a-range.md) | Export part of the song | P2 | M–L | 004 (both edit `export/`) | DONE (device run pending) |
 | 12 | [013](013-set-as-notification-or-alarm.md) | Set as notification or alarm sound | P3 | S | 004 (same file) | DONE (device run pending) |
-| 13 | [009](009-release-build.md) | Signed, shrunk release build, no secrets in git | P3 | M | 014 (to verify on device) | TODO |
+| 13 | [009](009-release-build.md) | Signed, shrunk release build, no secrets in git | P3 | M | 014 (to verify on device) | DONE (device run pending) |
 | 14 | [010](010-dependency-upgrade.md) | Dependencies current, in stages | P3 | M | 002, 003, 005 | TODO |
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (with one-line reason) | REJECTED (with one-line rationale)
