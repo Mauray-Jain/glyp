@@ -10,13 +10,20 @@ import android.os.Environment
 import android.provider.MediaStore
 import android.provider.Settings
 
+/** Which of the phone's default sounds a ringtone can become. */
+enum class SoundKind(val type: Int) {
+    RINGTONE(RingtoneManager.TYPE_RINGTONE),
+    NOTIFICATION(RingtoneManager.TYPE_NOTIFICATION),
+    ALARM(RingtoneManager.TYPE_ALARM),
+}
+
 /** A ringtone that has been saved to the device. */
 interface Ringtone {
     /**
-     * Makes this the default ringtone. Returns false, after opening the "Modify system
-     * settings" screen, when the app is not allowed to yet.
+     * Makes this the phone's default sound of [kind]. Returns false, after opening the
+     * "Modify system settings" screen, when the app is not allowed to yet.
      */
-    fun setAsDefault(): Boolean
+    fun setAsDefault(kind: SoundKind = SoundKind.RINGTONE): Boolean
 }
 
 /**
@@ -104,16 +111,16 @@ class RingtoneInstaller(context: Context) {
     }
 
     private fun ringtoneAt(uri: Uri) = object : Ringtone {
-        override fun setAsDefault() = setAsDefault(uri)
+        override fun setAsDefault(kind: SoundKind) = setAsDefault(uri, kind)
     }
 
-    private fun setAsDefault(uri: Uri): Boolean {
+    private fun setAsDefault(uri: Uri, kind: SoundKind): Boolean {
         if (!Settings.System.canWrite(appContext)) {
             val intent = Intent(Settings.ACTION_MANAGE_WRITE_SETTINGS, Uri.parse("package:${appContext.packageName}"))
             appContext.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
             return false
         }
-        RingtoneManager.setActualDefaultRingtoneUri(appContext, RingtoneManager.TYPE_RINGTONE, uri)
+        RingtoneManager.setActualDefaultRingtoneUri(appContext, kind.type, uri)
         return true
     }
 

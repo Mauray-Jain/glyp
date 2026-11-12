@@ -53,6 +53,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.mauray.glyp.audio.Timebase
 import com.mauray.glyp.composer.ComposerStyle
 import com.mauray.glyp.export.Ringtone
+import com.mauray.glyp.export.SoundKind
 import com.mauray.glyp.glyph.GlyphController
 import com.mauray.glyp.glyph.GlyphZones
 import com.mauray.glyp.ui.AppIcons
@@ -145,10 +146,14 @@ fun StudioScreen(projectId: String, onBack: () -> Unit) {
                 exportJob?.cancel()
                 export = ExportStage.Form()
             },
-            onSetRingtone = { saved ->
+            onSetRingtone = { saved, kind ->
                 // Said in the dialog: a snackbar would sit behind it, or fade while Settings is open.
-                val note = if (saved.ringtone.setAsDefault()) {
-                    "It's now your ringtone."
+                val note = if (saved.ringtone.setAsDefault(kind)) {
+                    when (kind) {
+                        SoundKind.RINGTONE -> "It's now your ringtone."
+                        SoundKind.NOTIFICATION -> "It's now your notification sound."
+                        SoundKind.ALARM -> "It's now your alarm sound."
+                    }
                 } else {
                     "Allow Glyp to modify system settings, then come back and tap again."
                 }
@@ -406,7 +411,7 @@ private sealed interface ExportStage {
     /** Naming the ringtone; [error] says why the last attempt failed, if it did. */
     data class Form(val error: String? = null) : ExportStage
     data object Encoding : ExportStage
-    /** [note] says how the last "Set as ringtone" went, if it was tapped. */
+    /** [note] says how the last "Set" went, if it was tapped. */
     data class Saved(val ringtone: Ringtone, val note: String? = null) : ExportStage
 }
 
@@ -418,12 +423,13 @@ private fun ExportDialog(
     /** The timeline's selection, offered as an alternative to the whole song. */
     selection: IntRange?,
     onExport: (title: String, range: IntRange?) -> Unit,
-    onSetRingtone: (ExportStage.Saved) -> Unit,
+    onSetRingtone: (ExportStage.Saved, SoundKind) -> Unit,
     /** Stops encoding and goes back to the form; also what Back does while encoding. */
     onCancelExport: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     var title by remember { mutableStateOf(name) }
+    var kind by remember { mutableStateOf(SoundKind.RINGTONE) }
     // Whole song by default, as before selections could be exported.
     var partOnly by remember { mutableStateOf(false) }
     val range = selection?.takeIf { partOnly }
@@ -439,10 +445,14 @@ private fun ExportDialog(
             Column {
                 when (stage) {
                     is ExportStage.Saved -> {
-                        Text(
-                            "Find it in Settings → Sound → Ringtone, or set it now and the lights play on your next call.",
-                            color = Muted,
-                        )
+                        // No promise about lights for notifications or alarms until that's been seen on a phone.
+                        Text("Find it in Settings → Sound, or set it now.", color = Muted)
+                        Spacer(Modifier.height(16.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            TogglePill("Ringtone", kind == SoundKind.RINGTONE, { kind = SoundKind.RINGTONE })
+                            TogglePill("Notification", kind == SoundKind.NOTIFICATION, { kind = SoundKind.NOTIFICATION })
+                            TogglePill("Alarm", kind == SoundKind.ALARM, { kind = SoundKind.ALARM })
+                        }
                         stage.note?.let { note ->
                             Spacer(Modifier.height(12.dp))
                             Text(note, style = MaterialTheme.typography.bodySmall, color = Color.White)
@@ -497,7 +507,7 @@ private fun ExportDialog(
         },
         confirmButton = {
             when (stage) {
-                is ExportStage.Saved -> PillButton("Set as ringtone", { onSetRingtone(stage) }, height = 48.dp)
+                is ExportStage.Saved -> PillButton("Set", { onSetRingtone(stage, kind) }, height = 48.dp)
                 ExportStage.Encoding -> Unit
                 else -> PillButton(
                     if (stage is ExportStage.Form && stage.error != null) "Try again" else "Export",
