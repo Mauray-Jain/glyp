@@ -15,10 +15,12 @@ object OpusTranscoder {
     private const val BITRATE = 128_000
     private const val TIMEOUT_US = 10_000L
 
-    fun encode(pcm: PcmAudio, output: File, onProgress: (Float) -> Unit = {}) {
+    /** Encodes all of [pcm], or only [pcmFrames] of it. */
+    fun encode(pcm: PcmAudio, output: File, pcmFrames: IntRange? = null, onProgress: (Float) -> Unit = {}) {
         val channels = minOf(pcm.channels, 2)
         // Read a frame at a time: a resampled copy of a long song doesn't fit next to the PCM.
-        val source = Resampled(pcm, channels, OPUS_RATE)
+        val window = pcmFrames ?: 0 until pcm.frameCount
+        val source = Resampled(pcm, channels, OPUS_RATE, window.first, window.last + 1)
         val totalFrames = source.frameCount
 
         val format = MediaFormat.createAudioFormat(MediaFormat.MIMETYPE_AUDIO_OPUS, OPUS_RATE, channels).apply {
@@ -88,18 +90,25 @@ object OpusTranscoder {
 
 /**
  * [pcm] with extra channels folded evenly into [channels] and linearly resampled to [rate]
- * (fine for ringtones, not for mastering), read a frame at a time.
+ * (fine for ringtones, not for mastering), read a frame at a time. Only PCM frames
+ * [from] until [until] are used; frame 0 here is PCM frame [from].
  */
-internal class Resampled(private val pcm: PcmAudio, private val channels: Int, rate: Int) {
+internal class Resampled(
+    private val pcm: PcmAudio,
+    private val channels: Int,
+    rate: Int,
+    private val from: Int = 0,
+    private val until: Int = pcm.frameCount,
+) {
     private val step = pcm.sampleRate.toDouble() / rate
-    val frameCount = (pcm.frameCount.toLong() * rate / pcm.sampleRate).toInt()
+    val frameCount = ((until - from).toLong() * rate / pcm.sampleRate).toInt()
 
     operator fun get(frame: Int, channel: Int): Short {
         val pos = frame * step
-        val i0 = pos.toInt().coerceAtMost(pcm.frameCount - 1)
-        val i1 = (i0 + 1).coerceAtMost(pcm.frameCount - 1)
-        val a = folded(i0, channel)
-        val b = folded(i1, channel)
+        val i0 = pos.toInt().coerceAtMost(until - from - 1)
+        val i1 = (i0 + 1).coerceAtMost(until - from - 1)
+        val a = folded(from + i0, channel)
+        val b = folded(from + i1, channel)
         return (a + (b - a) * (pos - i0)).toInt().toShort()
     }
 

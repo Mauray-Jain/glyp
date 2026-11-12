@@ -38,4 +38,21 @@ class ResampledTest {
         assertEquals(4, r.frameCount)
         assertEquals(listOf<Short>(7, 7, 7, 7), (0 until 4).map { r[it, 0] })
     }
+
+    @Test
+    fun `a window passes just its own frames through`() {
+        val pcm = PcmAudio(shortArrayOf(0, 10, 20, 30, 40, 50), 48_000, 1)
+        val r = Resampled(pcm, 1, 48_000, from = 2, until = 5)
+        assertEquals(3, r.frameCount)
+        assertEquals(listOf<Short>(20, 30, 40), (0 until 3).map { r[it, 0] })
+    }
+
+    @Test
+    fun `resampling a window never reads outside it`() {
+        // The frames around the window are loud; none of that may leak into its ends.
+        val pcm = PcmAudio(shortArrayOf(9999, 100, 100, 100, 9999), 24_000, 1)
+        val r = Resampled(pcm, 1, 48_000, from = 1, until = 4)
+        assertEquals(6, r.frameCount)
+        assertEquals(List<Short>(6) { 100 }, (0 until 6).map { r[it, 0] })
+    }
 }
