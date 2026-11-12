@@ -39,6 +39,27 @@ Nothing's Glyph SDK isn't redistributed in this repo; fetch it once from Nothing
 ./gradlew assembleDebug
 ```
 
+## Release build
+
+A release build is shrunk with R8 and signed with your own key. Put these in
+`~/.gradle/gradle.properties` on the build machine, never in the repo:
+
+```properties
+glyp.storeFile=/path/to/release.jks
+glyp.storePassword=…
+glyp.keyAlias=…
+glyp.keyPassword=…
+glyp.nothingKey=…
+```
+
+```bash
+./gradlew assembleRelease
+```
+
+Without `glyp.storeFile` the release APK is built unsigned. `glyp.nothingKey` is Nothing's API key
+for the Glyph SDK: the production key comes from Nothing's developer programme and must never be
+committed. Without it the build uses the development key `test`, which needs Glyph debug mode.
+
 ## Run on the phone
 
 Depending on the Nothing OS version, third-party apps may only drive the Glyph lights while

@@ -18,12 +18,32 @@ android {
         targetSdk = 36
         versionCode = 1
         versionName = "0.1.0"
+
+        // Nothing's API key for the Glyph SDK: "test" (development) unless the build machine sets
+        // glyp.nothingKey in ~/.gradle/gradle.properties. Never commit a real key.
+        manifestPlaceholders["nothingKey"] = providers.gradleProperty("glyp.nothingKey").getOrElse("test")
+    }
+
+    // Release signing comes from the build machine's ~/.gradle/gradle.properties (or -P flags),
+    // never from git. Without glyp.storeFile the release APK is built unsigned.
+    val releaseStoreFile = providers.gradleProperty("glyp.storeFile").orNull
+    signingConfigs {
+        if (releaseStoreFile != null) {
+            create("release") {
+                storeFile = file(releaseStoreFile)
+                storePassword = providers.gradleProperty("glyp.storePassword").orNull
+                keyAlias = providers.gradleProperty("glyp.keyAlias").orNull
+                keyPassword = providers.gradleProperty("glyp.keyPassword").orNull
+            }
+        }
     }
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            if (releaseStoreFile != null) signingConfig = signingConfigs.getByName("release")
         }
     }
     compileOptions {
