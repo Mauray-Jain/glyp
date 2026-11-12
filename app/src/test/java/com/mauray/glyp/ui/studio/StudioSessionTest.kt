@@ -314,4 +314,31 @@ class StudioSessionTest {
         assertEquals(Phase.Idle, r.open.phase)
         assertTrue("the dialog shows the reason, not a snackbar", r.messages.none { "disk full" in it })
     }
+
+    @Test
+    fun `exporting a selection passes its range to the exporter`() = runTest {
+        val r = rig()
+        val export = async { r.session.export("Chorus", 120..419) }
+        advance(200)
+        assertTrue(export.await().isSuccess)
+        assertEquals(120..419, r.exports.single().range)
+    }
+
+    @Test
+    fun `a selection shorter than a second can't be exported`() = runTest {
+        val r = rig()
+        val result = r.session.export("Blip", 100..158)
+        assertEquals("Pick at least a second of the song.", result.exceptionOrNull()?.message)
+        assertTrue(r.exports.isEmpty())
+        assertEquals(Phase.Idle, r.open.phase)
+    }
+
+    @Test
+    fun `exporting without a selection exports the whole song`() = runTest {
+        val r = rig()
+        val export = async { r.session.export("Whole") }
+        advance(200)
+        assertTrue(export.await().isSuccess)
+        assertEquals(null, r.exports.single().range)
+    }
 }
