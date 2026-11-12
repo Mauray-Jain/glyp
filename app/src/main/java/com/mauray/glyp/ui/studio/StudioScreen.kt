@@ -131,10 +131,11 @@ fun StudioScreen(projectId: String, onBack: () -> Unit) {
             stage = export,
             phase = open.phase,
             name = open.name,
-            onExport = { title ->
+            selection = vm.controls.selection,
+            onExport = { title, range ->
                 export = ExportStage.Encoding
                 exportJob = scope.launch {
-                    export = session.export(title).fold(
+                    export = session.export(title, range).fold(
                         { ExportStage.Saved(it) },
                         { ExportStage.Form(error = it.message ?: "Something went wrong") },
                     )
@@ -414,13 +415,19 @@ private fun ExportDialog(
     stage: ExportStage,
     phase: Phase,
     name: String,
-    onExport: (title: String) -> Unit,
+    /** The timeline's selection, offered as an alternative to the whole song. */
+    selection: IntRange?,
+    onExport: (title: String, range: IntRange?) -> Unit,
     onSetRingtone: (ExportStage.Saved) -> Unit,
     /** Stops encoding and goes back to the form; also what Back does while encoding. */
     onCancelExport: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     var title by remember { mutableStateOf(name) }
+    // Whole song by default, as before selections could be exported.
+    var partOnly by remember { mutableStateOf(false) }
+    val range = selection?.takeIf { partOnly }
+    val tooShort = range != null && range.count() < GlyphZones.FPS
     val encoding = stage == ExportStage.Encoding
 
     AlertDialog(
@@ -462,6 +469,21 @@ private fun ExportDialog(
                             shape = RoundedCornerShape(16.dp),
                             colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Color.White, focusedLabelColor = Color.White, cursorColor = Color.White),
                         )
+                        if (selection != null) {
+                            Spacer(Modifier.height(16.dp))
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                TogglePill("Whole song", !partOnly, { partOnly = false })
+                                TogglePill(
+                                    "Selection ${formatTime(selection.first)}–${formatTime(selection.last + 1)}",
+                                    partOnly,
+                                    { partOnly = true },
+                                )
+                            }
+                            if (tooShort) {
+                                Spacer(Modifier.height(8.dp))
+                                Text("Pick at least a second of the song.", style = MaterialTheme.typography.bodySmall, color = Muted)
+                            }
+                        }
                         stage.error?.let { error ->
                             Spacer(Modifier.height(12.dp))
                             Text("COULDN'T EXPORT", style = MaterialTheme.typography.labelSmall, color = NothingRed)
@@ -479,10 +501,10 @@ private fun ExportDialog(
                 ExportStage.Encoding -> Unit
                 else -> PillButton(
                     if (stage is ExportStage.Form && stage.error != null) "Try again" else "Export",
-                    { onExport(title.trim().ifEmpty { name }) },
+                    { onExport(title.trim().ifEmpty { name }, range) },
                     height = 48.dp,
                     // A cancelled encode takes a moment to stop.
-                    enabled = phase !is Phase.Exporting,
+                    enabled = phase !is Phase.Exporting && !tooShort,
                 )
             }
         },
