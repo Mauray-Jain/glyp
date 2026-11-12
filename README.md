@@ -4,14 +4,20 @@
 
 Light compositions and Glyph ringtones for the Nothing Phone (3a) / (3a) Pro.
 
-- **Auto compose**: pick a song; it is analysed (FFT bands + onset detection) and the lights are
-  generated in one of four styles: Pulse, Spectrum, Flow, Classic. Or start blank.
+- **Compositions**: the home screen lists your projects. Swipe one left to delete it, or
+  long-press to select several (Select all, Rename, Delete); every delete can be undone from the
+  snackbar.
+- **Auto compose**: pick a song up to 10 minutes long; it is analysed (FFT bands + onset
+  detection) and the lights are generated in one of four styles: Pulse, Spectrum, Flow, Classic.
+  Or start blank.
 - **Edit**: timeline of all 36 zones with a waveform, live preview on screen and on the real
   lights, fill / fade / pulse / sweep tools, regenerate a selection, undo/redo.
 - **Record**: five pads in the Glyph Composer layout; jam on the lights, or record hits over
   the song (layer or replace).
 - **Export**: writes an Ogg Opus ringtone with the light data in its tags (Nothing's ringtone
-  format) to `Ringtones/Glyp`, and can set it as the default ringtone.
+  format) to `Ringtones/Glyp`, and can set it as the default ringtone. Exporting the same name
+  again replaces that ringtone in place (it stays the default if it was), and an export can be
+  cancelled while it encodes.
 
 ## Build
 
@@ -33,8 +39,10 @@ Nothing's Glyph SDK isn't redistributed in this repo; fetch it once from Nothing
 
 ## Run on the phone
 
-Third-party apps can only drive the Glyph lights while Glyph debug mode is on (it switches off
-after 48 hours):
+Depending on the Nothing OS version, third-party apps may only drive the Glyph lights while
+Glyph debug mode is on (it switches off after 48 hours). On the build tested in November 2026 the
+lights worked with it off, but the app still uses Nothing's development key (`test`), which is
+documented to need it:
 
 ```bash
 adb shell settings put global nt_glyph_interface_debug_enable 1
@@ -43,6 +51,22 @@ adb shell settings put global nt_glyph_interface_debug_enable 1
 ```bash
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
+
+When the lights stay dark because of Nothing OS itself, the Studio header says so: `GLYPHS OFF`
+or `SCREEN UP` (see below).
+
+## Glyph status
+
+The label at the top right of the Studio says whether the phone's lights follow the app:
+
+| Label | Meaning |
+|---|---|
+| `● LIVE` | Connected; the Glyphs show what the Studio plays. |
+| `CONNECTING` | Binding to Nothing's Glyph service (it retries on its own). |
+| `GLYPHS OFF` | Nothing OS has the Glyph Interface off: its Quick Settings tile, or its bedtime schedule. A hint explains for 2 seconds; tap the label to see it again. |
+| `SCREEN UP` | The phone lies screen-up, and Nothing OS keeps the Glyphs dark then. Tap the label for the reason. |
+| `NO GLYPH ACCESS` | The Glyph service refused to register the app. |
+| `PREVIEW` | Not a Phone (3a): no real lights, the on-screen preview only. |
 
 ## Device check
 

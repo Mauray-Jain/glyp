@@ -29,3 +29,11 @@ split between the exporter, the ViewModel and the dialog.
   code and the tests simple.
 - **Ask for WRITE_SETTINGS up front.** Most users export without setting a default ringtone;
   asking only when they tap "Set as ringtone" keeps the first export permission-free.
+
+## Update: re-export and cancel (2026-11)
+
+- Exporting a name that already exists in `Ringtones/Glyp` overwrites that MediaStore entry in
+  place: the URI is kept, so a ringtone that is the phone's default stays the default with the new
+  lights. The old file is read first and written back if the overwrite fails. A file owned by an
+  earlier install of the app can't be written, so that case falls back to a new entry.
+- Encoding checks for cancellation on each progress report; a cancelled export saves nothing.
