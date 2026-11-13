@@ -24,7 +24,7 @@ Light compositions and Glyph ringtones for the Nothing Phone (3a) / (3a) Pro.
 ## Build
 
 Needs an Android SDK with platform 37 and build-tools 37.0.0 (point `local.properties` at it with
-`sdk.dir=...`). Gradle runs itself on JDK 17 (see `gradle/gradle-daemon-jvm.properties`) and
+`sdk.dir=...`). Gradle runs itself on JDK 21 (see `gradle/gradle-daemon-jvm.properties`) and
 downloads one if none is installed; the `java` on your `PATH` only needs to be able to start
 the Gradle wrapper.
 
